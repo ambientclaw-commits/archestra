@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   AuthField,
+  CatalogPreset,
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalogServerType,
   LocalConfig,
@@ -64,6 +65,7 @@ const internalMcpCatalogTable = pgTable(
     // Custom Kubernetes deployment spec YAML (if null, generated from localConfig)
     deploymentSpecYaml: text("deployment_spec_yaml"),
     userConfig: jsonb("user_config").$type<UserConfig>().default({}),
+    presets: jsonb("presets").$type<Array<CatalogPreset>>().default([]),
     // OAuth configuration for remote servers
     oauthConfig: jsonb("oauth_config").$type<OAuthConfig>(),
     enterpriseManagedConfig: jsonb(

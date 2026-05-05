@@ -264,6 +264,34 @@ export function LocalServerInstallDialog({
     setUserConfigValues((prev) => ({ ...prev, [key]: value }));
   };
 
+  const presets = catalogItem?.presets ?? [];
+  const promptedEnvVarKeys = new Set(promptedEnvVars.map((e) => e.key));
+  const promptedUserConfigKeys = new Set(Object.keys(promptableUserConfig));
+  const presetCanFillSomething =
+    presets.length > 0 &&
+    (promptedEnvVarKeys.size > 0 || promptedUserConfigKeys.size > 0);
+
+  const applyPreset = (presetName: string) => {
+    const preset = presets.find((p) => p.name === presetName);
+    if (!preset) return;
+    const envPatch: Record<string, string> = {};
+    const userPatch: Record<string, string> = {};
+    for (const [key, value] of Object.entries(preset.values ?? {})) {
+      const stringified = presetValueToString(value);
+      if (promptedEnvVarKeys.has(key)) {
+        envPatch[key] = stringified;
+      } else if (promptedUserConfigKeys.has(key)) {
+        userPatch[key] = stringified;
+      }
+    }
+    if (Object.keys(envPatch).length > 0) {
+      setEnvironmentValues((prev) => ({ ...prev, ...envPatch }));
+    }
+    if (Object.keys(userPatch).length > 0) {
+      setUserConfigValues((prev) => ({ ...prev, ...userPatch }));
+    }
+  };
+
   const handleInstall = async () => {
     if (!catalogItem) return;
 
@@ -557,6 +585,33 @@ export function LocalServerInstallDialog({
           onChange={setServiceAccount}
           disabled={isInstalling}
         />
+      )}
+
+      {canInstall && presetCanFillSomething && (
+        <div className="space-y-2">
+          <Label>Preset</Label>
+          <Select onValueChange={applyPreset}>
+            <SelectTrigger>
+              <SelectValue placeholder="-- Select a preset to pre-fill fields --" />
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.name} value={preset.name}>
+                  {preset.name}
+                  {preset.description ? (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {preset.description}
+                    </span>
+                  ) : null}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Fields below will be pre-filled from the preset. You can still edit
+            them.
+          </p>
+        </div>
       )}
 
       {canInstall && (
@@ -944,6 +999,14 @@ export function LocalServerInstallDialog({
       )}
     </StandardFormDialog>
   );
+}
+
+function presetValueToString(
+  value: string | number | boolean | string[] | null | undefined,
+): string {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.join(",");
+  return String(value);
 }
 
 const MAX_TEXTAREA_HEIGHT = 200;

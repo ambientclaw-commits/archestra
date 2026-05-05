@@ -228,6 +228,17 @@ export function transformFormToApiData(
     data.labels = [];
   }
 
+  // Handle presets
+  if (values.presets && values.presets.length > 0) {
+    data.presets = values.presets.map((p) => ({
+      name: p.name.trim(),
+      ...(p.description ? { description: p.description } : {}),
+      values: p.values,
+    }));
+  } else {
+    data.presets = [];
+  }
+
   // Handle scope
   if (values.scope) {
     data.scope = values.scope;
@@ -473,6 +484,13 @@ export function transformCatalogItemToFormValues(
     oauthClientSecretVaultKey,
     // Labels
     labels: item.labels ?? [],
+    // Presets
+    presets:
+      item.presets?.map((p) => ({
+        name: p.name,
+        description: p.description ?? "",
+        values: p.values ?? {},
+      })) ?? [],
     // Scope
     scope: (item.scope as AgentScope) ?? "org",
     // Teams
@@ -757,6 +775,7 @@ export function transformExternalCatalogToFormValues(
     },
     scope: "personal",
     teams: [],
+    presets: [],
   } as McpCatalogFormValues;
 }
 
@@ -811,7 +830,7 @@ function buildStaticHeaderUserConfig(
   return userConfig;
 }
 
-function getAdditionalHeaderFieldName(params: {
+export function getAdditionalHeaderFieldName(params: {
   fieldName?: string;
   headerName: string;
   index: number;

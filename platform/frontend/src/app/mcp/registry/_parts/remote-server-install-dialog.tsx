@@ -224,6 +224,24 @@ export function RemoteServerInstallDialog({
     }),
   );
   const hasConfig = Object.keys(promptableUserConfig).length > 0;
+
+  const presets = catalogItem?.presets ?? [];
+  const promptableKeys = new Set(Object.keys(promptableUserConfig));
+  const presetCanFillSomething = presets.length > 0 && promptableKeys.size > 0;
+
+  const applyPreset = (presetName: string) => {
+    const preset = presets.find((p) => p.name === presetName);
+    if (!preset) return;
+    const patch: Record<string, string> = {};
+    for (const [key, value] of Object.entries(preset.values ?? {})) {
+      if (!promptableKeys.has(key)) continue;
+      if (value === null || value === undefined) continue;
+      patch[key] = Array.isArray(value) ? value.join(",") : String(value);
+    }
+    if (Object.keys(patch).length > 0) {
+      setConfigValues((prev) => ({ ...prev, ...patch }));
+    }
+  };
   const hasOAuth = !!catalogItem.oauthConfig;
   const usesBrowserOAuth =
     catalogItem.oauthConfig?.grant_type !== "client_credentials";
@@ -369,6 +387,33 @@ export function RemoteServerInstallDialog({
             short-lived bearer tokens automatically when tools run.
           </AlertDescription>
         </Alert>
+      )}
+
+      {canInstall && presetCanFillSomething && (
+        <div className="space-y-2">
+          <Label>Preset</Label>
+          <Select onValueChange={applyPreset}>
+            <SelectTrigger>
+              <SelectValue placeholder="-- Select a preset to pre-fill fields --" />
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.name} value={preset.name}>
+                  {preset.name}
+                  {preset.description ? (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {preset.description}
+                    </span>
+                  ) : null}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Fields below will be pre-filled from the preset. You can still edit
+            them.
+          </p>
+        </div>
       )}
 
       {/* Config fields - always show when config exists */}

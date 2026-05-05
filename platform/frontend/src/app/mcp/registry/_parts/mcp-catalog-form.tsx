@@ -94,6 +94,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "./mcp-catalog-form.utils";
+import { PresetsSection } from "./presets-section";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -237,6 +238,7 @@ export function McpCatalogForm({
           },
           scope: "personal",
           teams: [],
+          presets: [],
         }),
   });
 
@@ -2107,6 +2109,9 @@ export function McpCatalogForm({
               disablePromptOnInstallation={isMultitenant}
               disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so values are set once at deploy time and cannot be prompted per install."
             />
+
+            <Separator />
+            <PresetsSection control={form.control} form={form} />
 
             <Separator />
             <div className={embedded ? "mb-4" : ""}>

@@ -50,6 +50,15 @@ export const UserConfigFieldSchema = z.object({
   valuePrefix: z.string().optional(),
 });
 
+export const CatalogPresetSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  values: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  ),
+});
+
 // Define a version of LocalConfigSchema for SELECT operations
 // where required and description fields are optional (database may not have them)
 // Note: We can't use .extend() on LocalConfigSchema because it has .refine()
@@ -104,6 +113,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   serverType: InternalMcpCatalogServerTypeSchema,
   authFields: z.array(AuthFieldSchema).nullable(),
   userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
+  presets: z.array(CatalogPresetSchema).nullable(),
   oauthConfig: OAuthConfigSchema.nullable(),
   enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
@@ -127,6 +137,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
       .record(z.string(), UserConfigFieldSchema)
       .nullable()
       .optional(),
+    presets: z.array(CatalogPresetSchema).nullable().optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
@@ -157,6 +168,7 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
       .record(z.string(), UserConfigFieldSchema)
       .nullable()
       .optional(),
+    presets: z.array(CatalogPresetSchema).nullable().optional(),
     oauthConfig: OAuthConfigSchema.nullable().optional(),
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
@@ -191,6 +203,7 @@ export type InternalMcpCatalogServerType = z.infer<
 export type AuthField = z.infer<typeof AuthFieldSchema>;
 export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
 export type UserConfig = Record<string, UserConfigField>;
+export type CatalogPreset = z.infer<typeof CatalogPresetSchema>;
 export type OAuthConfig = z.infer<typeof OAuthConfigSchema>;
 
 // Export LocalConfig type for reuse in database schema

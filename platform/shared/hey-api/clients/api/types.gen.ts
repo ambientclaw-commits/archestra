@@ -26394,6 +26394,13 @@ export type GetInternalMcpCatalogResponses = {
         userConfig: {
             [key: string]: UserConfigField;
         } | null;
+        presets: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -26520,6 +26527,13 @@ export type CreateInternalMcpCatalogItemData = {
         userConfig?: {
             [key: string]: UserConfigFieldInput;
         } | null;
+        presets?: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig?: {
             name: string;
             server_url: string;
@@ -26711,6 +26725,13 @@ export type CreateInternalMcpCatalogItemResponses = {
         userConfig: {
             [key: string]: UserConfigField;
         } | null;
+        presets: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -26999,6 +27020,13 @@ export type GetInternalMcpCatalogItemResponses = {
         userConfig: {
             [key: string]: UserConfigField;
         } | null;
+        presets: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig: {
             name: string;
             server_url: string;
@@ -27123,6 +27151,13 @@ export type UpdateInternalMcpCatalogItemData = {
         userConfig?: {
             [key: string]: UserConfigFieldInput;
         } | null;
+        presets?: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig?: {
             name: string;
             server_url: string;
@@ -27316,6 +27351,13 @@ export type UpdateInternalMcpCatalogItemResponses = {
         userConfig: {
             [key: string]: UserConfigField;
         } | null;
+        presets: Array<{
+            name: string;
+            description?: string;
+            values: {
+                [key: string]: string | number | boolean | Array<string>;
+            };
+        }> | null;
         oauthConfig: {
             name: string;
             server_url: string;

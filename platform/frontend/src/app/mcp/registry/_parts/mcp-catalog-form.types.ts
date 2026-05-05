@@ -218,6 +218,24 @@ export const formSchema = z
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))
       .optional(),
+    // Presets: named bundles of pre-filled values for prompt-on-install fields
+    presets: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1, "Preset name is required"),
+          description: z.string().optional().or(z.literal("")),
+          values: z.record(
+            z.string(),
+            z.union([
+              z.string(),
+              z.number(),
+              z.boolean(),
+              z.array(z.string()),
+            ]),
+          ),
+        }),
+      )
+      .optional(),
     // Scope for catalog item visibility
     scope: z.enum(["personal", "team", "org"]).optional(),
     // Team IDs for team-scoped items
