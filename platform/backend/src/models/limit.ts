@@ -541,8 +541,14 @@ export class LimitValidationService {
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
+    /**
+     * The model the request will use. Model-scoped limits only block requests
+     * for models within their scope — an exceeded limit scoped to one model
+     * family must not block requests for an unrelated, in-budget model.
+     */
+    model?: string;
   }): Promise<null | [string, string]> {
-    const { agentId, userId, virtualKeyId } = params;
+    const { agentId, userId, virtualKeyId, model } = params;
 
     try {
       logger.info(
@@ -600,8 +606,11 @@ export class LimitValidationService {
           `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
         );
         const vkLimitViolation = await LimitValidationService.checkEntityLimits(
-          "virtual_key",
-          virtualKeyId,
+          {
+            entityType: "virtual_key",
+            entityId: virtualKeyId,
+            requestModel: model,
+          },
         );
         if (vkLimitViolation) {
           logger.info(
@@ -619,7 +628,11 @@ export class LimitValidationService {
           `[LimitValidation] Checking user-level limits for: ${userId}`,
         );
         const userLimitViolation =
-          await LimitValidationService.checkEntityLimits("user", userId);
+          await LimitValidationService.checkEntityLimits({
+            entityType: "user",
+            entityId: userId,
+            requestModel: model,
+          });
         if (userLimitViolation) {
           logger.info(
             `[LimitValidation] BLOCKED by user-level limit for: ${userId}`,
@@ -631,6 +644,7 @@ export class LimitValidationService {
             await LimitValidationService.checkDefaultUserLimit({
               organizationId,
               userId,
+              model,
             });
           if (defaultUserLimitViolation) {
             logger.info(
@@ -646,7 +660,11 @@ export class LimitValidationService {
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
       const agentLimitViolation =
-        await LimitValidationService.checkEntityLimits("agent", agentId);
+        await LimitValidationService.checkEntityLimits({
+          entityType: "agent",
+          entityId: agentId,
+          requestModel: model,
+        });
       if (agentLimitViolation) {
         logger.info(
           `[LimitValidation] BLOCKED by agent-level limit for: ${agentId}`,
@@ -673,7 +691,11 @@ export class LimitValidationService {
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
           const teamLimitViolation =
-            await LimitValidationService.checkEntityLimits("team", team.id);
+            await LimitValidationService.checkEntityLimits({
+              entityType: "team",
+              entityId: team.id,
+              requestModel: model,
+            });
           if (teamLimitViolation) {
             logger.info(
               `[LimitValidation] BLOCKED by team-level limit for team: ${team.id}`,
@@ -691,10 +713,11 @@ export class LimitValidationService {
             `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
           );
           const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              organizationId,
-            );
+            await LimitValidationService.checkEntityLimits({
+              entityType: "organization",
+              entityId: organizationId,
+              requestModel: model,
+            });
           if (orgLimitViolation) {
             logger.info(
               `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
@@ -723,10 +746,12 @@ export class LimitValidationService {
   /**
    * Check if current token cost usage has exceeded limits for a specific entity
    */
-  private static async checkEntityLimits(
-    entityType: LimitEntityType,
-    entityId: string,
-  ): Promise<null | [string, string]> {
+  private static async checkEntityLimits(params: {
+    entityType: LimitEntityType;
+    entityId: string;
+    requestModel: string | undefined;
+  }): Promise<null | [string, string]> {
+    const { entityType, entityId, requestModel } = params;
     try {
       logger.info(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
@@ -749,6 +774,16 @@ export class LimitValidationService {
       }
 
       for (const limit of limits) {
+        // A model-scoped limit only governs requests for models within its
+        // scope. An exceeded limit scoped to one model family must not block
+        // requests for an unrelated, in-budget model.
+        if (!limitAppliesToModel(limit.model, requestModel)) {
+          logger.info(
+            `[LimitValidation] Skipping limit ${limit.id} for ${entityType} ${entityId}: request model ${requestModel ?? "unknown"} is outside its model scope`,
+          );
+          continue;
+        }
+
         logger.info(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
@@ -886,6 +921,7 @@ ${contentMessage}`;
   private static async checkDefaultUserLimit(params: {
     organizationId: string;
     userId: string;
+    model?: string;
   }): Promise<null | [string, string]> {
     try {
       const [organization] = await db
@@ -905,6 +941,15 @@ ${contentMessage}`;
         return null;
       }
 
+      // The default user limit can be scoped to specific models. Skip it when
+      // the request targets a model outside that scope.
+      const defaultUserLimitModels = normalizeLimitModels(
+        organization.defaultUserLimitModel,
+      );
+      if (!limitAppliesToModel(defaultUserLimitModels, params.model)) {
+        return null;
+      }
+
       const customUserLimits = await LimitModel.findLimitsForValidation(
         "user",
         params.userId,
@@ -920,7 +965,7 @@ ${contentMessage}`;
       const usage = await getDefaultUserLimitUsage({
         organizationId: params.organizationId,
         userId: params.userId,
-        models: normalizeLimitModels(organization.defaultUserLimitModel),
+        models: defaultUserLimitModels,
         cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
       });
 
@@ -1127,6 +1172,28 @@ function normalizeLimitModels(models: string[] | null | undefined) {
   }
 
   return models;
+}
+
+/**
+ * Decide whether a limit governs a request for `requestModel`.
+ *
+ * A limit with no model scope (`null`/empty) applies to every model. A
+ * model-scoped limit applies only to requests for one of its listed models —
+ * e.g. an exceeded Anthropic-scoped limit must not block a Gemini request.
+ * When the request model is unknown we cannot narrow scope, so the limit is
+ * applied (fail-safe: keep enforcing).
+ */
+function limitAppliesToModel(
+  limitModels: string[] | null | undefined,
+  requestModel: string | undefined,
+): boolean {
+  if (!limitModels || limitModels.length === 0) {
+    return true;
+  }
+  if (!requestModel) {
+    return true;
+  }
+  return limitModels.includes(requestModel);
 }
 
 export default LimitModel;

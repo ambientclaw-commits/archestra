@@ -37,6 +37,19 @@ export function captureRawProviderErrorInSentry(params: {
   errorType: string | undefined;
   rawErrorJson: string;
 }): void {
+  // Expected client errors (4xx) — rate limits, quota/cost-limit rejections,
+  // invalid keys, not-found models — are normal operating conditions, not
+  // bugs. Reporting them only creates noise. This mirrors the 4xx filter in
+  // the `beforeSend` hook below, which never sees these synthetic errors
+  // because they carry no `statusCode` property.
+  if (
+    params.statusCode !== undefined &&
+    params.statusCode >= 400 &&
+    params.statusCode < 500
+  ) {
+    return;
+  }
+
   const error = new Error(params.errorMessage);
   error.name = "RawProviderError";
 

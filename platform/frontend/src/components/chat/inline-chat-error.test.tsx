@@ -18,7 +18,7 @@ describe("InlineChatError", () => {
     vi.clearAllMocks();
   });
 
-  it("shows only the support message and correlation IDs in slim mode", () => {
+  it("shows both the error message and the support message in slim mode", () => {
     render(
       <InlineChatError
         error={
@@ -42,6 +42,9 @@ describe("InlineChatError", () => {
       />,
     );
 
+    // The support message must augment the error, not replace it: the user
+    // still needs to see what actually went wrong.
+    expect(screen.getByText("The provider failed")).toBeInTheDocument();
     expect(
       screen.getByText("Contact support@example.com and include these IDs."),
     ).toBeInTheDocument();

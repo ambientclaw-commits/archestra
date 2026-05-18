@@ -61,7 +61,10 @@ export function InlineChatError({
   const copyDebugInfo = () => {
     const lines: string[] = [];
 
-    lines.push(supportMessage?.trim() || chatError.message);
+    lines.push(chatError.message);
+    if (supportMessage?.trim()) {
+      lines.push(supportMessage.trim());
+    }
     if (!slimChatErrorUi) {
       if (agentName) lines.push(`Agent: ${agentName}`);
       if (selectedModel) lines.push(`Model: ${selectedModel}`);
@@ -94,9 +97,16 @@ export function InlineChatError({
           <div className="flex items-start gap-2 text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <div className="flex-1 space-y-2">
-              <p className="text-sm text-foreground">
-                {supportMessage ? supportMessage : chatError.message}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-foreground whitespace-pre-line">
+                  {chatError.message}
+                </p>
+                {supportMessage && (
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    {supportMessage}
+                  </p>
+                )}
+              </div>
 
               <div className="flex items-center gap-1.5 flex-wrap">
                 {refEntries.map((entry) => (
@@ -132,11 +142,16 @@ export function InlineChatError({
         <div className="flex items-start gap-2 text-destructive">
           <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <div className="flex-1 space-y-2">
-            {supportMessage ? (
-              <p className="text-sm text-foreground">{supportMessage}</p>
-            ) : (
-              <p className="text-sm text-foreground">{chatError.message}</p>
-            )}
+            <div className="space-y-1">
+              <p className="text-sm text-foreground whitespace-pre-line">
+                {chatError.message}
+              </p>
+              {supportMessage && (
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {supportMessage}
+                </p>
+              )}
+            </div>
 
             <div className="flex items-center gap-1.5 flex-wrap">
               {agentName && (
@@ -210,11 +225,6 @@ export function InlineChatError({
                       </span>
                     )}
                   </div>
-                  {supportMessage && (
-                    <p className="text-sm text-foreground">
-                      {chatError.message}
-                    </p>
-                  )}
                   {chatError.originalError && (
                     <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
                       {formatOriginalError(chatError.originalError)}

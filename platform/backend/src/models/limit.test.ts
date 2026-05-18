@@ -1256,6 +1256,69 @@ describe("LimitValidationService", () => {
       expect(result?.[1]).toContain("agent-level");
     });
 
+    describe("model-scoped limits", () => {
+      async function makeExceededScopedAgentLimit(agentId: string) {
+        const scopedLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agentId,
+          limitType: "token_cost",
+          limitValue: 1,
+          model: ["gpt-4o"],
+        });
+        await LimitModel.updateTokenLimitUsage(
+          "agent",
+          agentId,
+          "gpt-4o",
+          1000000,
+          1000000,
+        );
+        // Prevent cleanup from resetting test data
+        await LimitModel.patch(scopedLimit.id, { lastCleanup: new Date() });
+      }
+
+      test("does not block a request for a model outside an exceeded limit's scope", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({ name: "Scoped Limit Agent" });
+        await makeExceededScopedAgentLimit(agent.id);
+
+        const result = await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+          model: "gemini-2.5-pro",
+        });
+
+        expect(result).toBeNull();
+      });
+
+      test("blocks a request for a model within an exceeded limit's scope", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({ name: "Scoped Limit Agent" });
+        await makeExceededScopedAgentLimit(agent.id);
+
+        const result = await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+          model: "gpt-4o",
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.[1]).toContain("agent-level");
+      });
+
+      test("enforces a scoped limit when the request model is unknown (fail-safe)", async ({
+        makeAgent,
+      }) => {
+        const agent = await makeAgent({ name: "Scoped Limit Agent" });
+        await makeExceededScopedAgentLimit(agent.id);
+
+        const result = await LimitValidationService.checkLimitsBeforeRequest({
+          agentId: agent.id,
+        });
+
+        expect(result).not.toBeNull();
+      });
+    });
+
     test("should check team limits before organization limits", async ({
       makeAgent,
       makeOrganization,

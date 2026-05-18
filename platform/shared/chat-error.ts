@@ -27,6 +27,13 @@ export const ArchestraInternalErrorCode = {
 export type ArchestraInternalErrorCode =
   (typeof ArchestraInternalErrorCode)[keyof typeof ArchestraInternalErrorCode];
 
+/**
+ * The `error.code` value emitted by the LLM proxy when a request is rejected
+ * because a configured token cost limit has been exceeded. Shared so the proxy
+ * (which produces it) and the chat-error mapper (which detects it) cannot drift.
+ */
+export const TOKEN_COST_LIMIT_EXCEEDED_CODE = "token_cost_limit_exceeded";
+
 // =============================================================================
 // Provider-Specific Error Types (from official documentation)
 // =============================================================================
@@ -254,6 +261,8 @@ export const MinimaxErrorTypes = {
 export enum ChatErrorCode {
   /** Rate/quota exceeded - retryable after delay */
   RateLimit = "rate_limit",
+  /** A configured Archestra token cost limit was exceeded - not retryable */
+  UsageLimitExceeded = "usage_limit_exceeded",
   /** Invalid or missing API key */
   Authentication = "authentication",
   /** API key lacks permissions for the requested resource */
@@ -280,6 +289,8 @@ export enum ChatErrorCode {
 export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
+  [ChatErrorCode.UsageLimitExceeded]:
+    "A usage limit set by your administrator has been reached. Contact your administrator to increase it.",
   [ChatErrorCode.Authentication]:
     "Invalid API key. Please check your Chat Settings.",
   [ChatErrorCode.PermissionDenied]:

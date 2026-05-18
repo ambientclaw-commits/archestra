@@ -38,6 +38,8 @@ Usage limits are guardrails for LLM spend. Archestra supports token-cost limits 
 
 Limits are evaluated from recorded model usage, so pricing configuration affects token-cost limits directly.
 
+A model-scoped limit only blocks requests for the models it targets. Exceeding a limit scoped to one set of models does not block requests for models outside that scope; a limit with no model specified blocks every request for the entity.
+
 ## Default User Limits
 
 Admins can configure a default user limit in LLM settings. It applies to every current and future user.

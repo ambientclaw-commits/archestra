@@ -1643,3 +1643,56 @@ describe("ProviderError", () => {
     });
   });
 });
+
+// =============================================================================
+// Token Cost Limit Refusal Tests
+// =============================================================================
+
+describe("mapProviderError - token cost limit refusal", () => {
+  // The LLM proxy returns this body with HTTP 429 when a configured token
+  // cost limit is exceeded. It is an Archestra guardrail, not a provider
+  // rate limit.
+  const contentMessage =
+    "\nI cannot process this request because the organization-level token cost limit has been exceeded.\n\nCurrent usage: $1511.71\nLimit: $1500.00\nRemaining: $0.00\n\nPlease contact your administrator to increase the limit or wait for the usage to reset.";
+
+  function createCostLimitRefusal() {
+    return {
+      name: "AI_APICallError",
+      statusCode: 429,
+      responseBody: JSON.stringify({
+        error: {
+          message: contentMessage,
+          type: "rate_limit_exceeded",
+          code: "token_cost_limit_exceeded",
+        },
+      }),
+      isRetryable: true,
+    };
+  }
+
+  it("classifies the refusal as UsageLimitExceeded, not RateLimit", () => {
+    const result = mapProviderError(createCostLimitRefusal(), "bedrock");
+
+    expect(result.code).toBe(ChatErrorCode.UsageLimitExceeded);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("surfaces the proxy's explanation verbatim as the user-facing message", () => {
+    const result = mapProviderError(createCostLimitRefusal(), "bedrock");
+
+    expect(result.message).toBe(contentMessage.trim());
+    expect(result.message).toContain("$1511.71");
+  });
+
+  it("classifies the refusal the same way regardless of the request provider", () => {
+    const result = mapProviderError(createCostLimitRefusal(), "gemini");
+
+    expect(result.code).toBe(ChatErrorCode.UsageLimitExceeded);
+  });
+
+  it("does not report the refusal to Sentry (expected 4xx, not a bug)", () => {
+    mapProviderError(createCostLimitRefusal(), "bedrock");
+
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+});

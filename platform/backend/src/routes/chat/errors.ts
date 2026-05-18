@@ -16,6 +16,7 @@ import {
   OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
+  TOKEN_COST_LIMIT_EXCEEDED_CODE,
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@shared";
@@ -185,6 +186,23 @@ function extractArchestraInternalCode(
     // Not JSON — fall through.
   }
   return undefined;
+}
+
+/**
+ * Detect the LLM-proxy refusal emitted when a configured token cost limit is
+ * exceeded. The proxy returns `{ error: { message, type, code } }` with
+ * `code === TOKEN_COST_LIMIT_EXCEEDED_CODE`. This is an Archestra guardrail
+ * rejection, not a provider rate limit — it must be classified distinctly so
+ * the user sees an accurate, non-retryable message.
+ */
+function isTokenCostLimitRefusal(responseBody: string | undefined): boolean {
+  if (!responseBody) return false;
+  try {
+    const parsed = JSON.parse(responseBody);
+    return parsed?.error?.code === TOKEN_COST_LIMIT_EXCEEDED_CODE;
+  } catch {
+    return false;
+  }
 }
 
 // =============================================================================
@@ -1531,6 +1549,14 @@ export function mapProviderError(
     errorCode = ChatErrorCode.ContextTooLong;
   }
 
+  // The LLM-proxy token-cost-limit refusal is an Archestra guardrail, not a
+  // provider rate limit. Classify it distinctly so the user gets an accurate,
+  // non-retryable message instead of "too many requests, please try again".
+  const isTokenCostLimit = isTokenCostLimitRefusal(responseBody);
+  if (isTokenCostLimit) {
+    errorCode = ChatErrorCode.UsageLimitExceeded;
+  }
+
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
@@ -1566,7 +1592,7 @@ export function mapProviderError(
     "[ChatErrorMapper] Mapped provider error",
   );
 
-  return createErrorResponse(
+  const response = createErrorResponse(
     errorCode,
     provider,
     statusCode,
@@ -1585,6 +1611,17 @@ export function mapProviderError(
         : undefined,
     },
   );
+
+  // The proxy authors a complete, user-safe explanation for cost-limit
+  // refusals (current spend, the limit, who to contact). Surface it verbatim
+  // instead of the generic canned text so the user understands exactly what
+  // happened. It carries no provider internals, so it survives slim-UI
+  // sanitization (which keeps only `message`).
+  if (isTokenCostLimit) {
+    response.message = errorMessage.trim();
+  }
+
+  return response;
 }
 
 function isStreamTerminatedError(error: unknown): boolean {
