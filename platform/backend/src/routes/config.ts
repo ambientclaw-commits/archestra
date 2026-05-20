@@ -6,6 +6,7 @@ import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
@@ -61,6 +62,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
+              codeRuntime: z.boolean(),
               advancedToolFeaturesEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
@@ -103,6 +105,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          codeRuntime: codeRuntimeService.isEnabled,
           advancedToolFeaturesEnabled:
             config.agents.advancedToolFeaturesEnabled,
           byosEnabled: isByosEnabled(),

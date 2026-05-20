@@ -108,6 +108,7 @@ export const TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME = "swap_to_default_agent";
 export const TOOL_ARTIFACT_WRITE_SHORT_NAME = "artifact_write";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
+export const TOOL_RUN_PYTHON_SHORT_NAME = "run_python";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -173,6 +174,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_RUN_PYTHON_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =
@@ -312,6 +314,8 @@ export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_TOOL_SHORT_NAME}` as const;
+export const TOOL_RUN_PYTHON_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_PYTHON_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,

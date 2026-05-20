@@ -54,6 +54,7 @@
     "@better-auth/oauth-provider": "1.6.5",
     "@better-auth/sso": "1.6.5",
     "@chonkiejs/core": "^0.0.7",
+    "@dagger.io/dagger": "^0.20.8",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "^11.4.4",

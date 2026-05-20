@@ -512,6 +512,10 @@ export const getAnalyticsConfig = () => ({
   },
 });
 
+const mcpServerBaseImage =
+  process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
+  `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+
 const config = {
   frontendBaseUrl,
   api: {
@@ -780,9 +784,7 @@ const config = {
    */
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
-    mcpServerBaseImage:
-      process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
-      `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`,
+    mcpServerBaseImage,
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -796,6 +798,33 @@ const config = {
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
     },
+  },
+  /**
+   * sandboxed code-execution runtime — lets agents run Python through the
+   * `archestra__run_python` tool. backed by a Dagger Engine; disabled by default.
+   */
+  codeRuntime: {
+    enabled: process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true",
+    image: process.env.ARCHESTRA_CODE_RUNTIME_IMAGE || mcpServerBaseImage,
+    /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
+    daggerEngineHost:
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_ENGINE_HOST || undefined,
+    /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
+    daggerCliBin:
+      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN || undefined,
+    /** hard wall-clock cap per run, and the default when the caller omits one. */
+    timeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS,
+      60,
+    ),
+    maxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT,
+      10,
+    ),
+    maxOutputBytes: parsePositiveInt(
+      process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
+      65536,
+    ),
   },
   vault: {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,

@@ -213,6 +213,32 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     echo "${KIND_SHA256}  /usr/local/bin/kind" | sha256sum -c - && \
 #     chmod +x /usr/local/bin/kind
 
+# Install the Dagger CLI. The @dagger.io/dagger SDK needs it to open a session
+# to the Dagger Engine; its npm postinstall download is blocked by
+# ignore-scripts, so the binary is pinned + checksum-verified here instead.
+# Keep DAGGER_VERSION in sync with @dagger.io/dagger in backend/package.json.
+RUN set -eux; \
+    DAGGER_VERSION="0.20.8"; \
+    ARCH="$(uname -m)"; \
+    if [ "$ARCH" = "x86_64" ]; then \
+        DAGGER_ARCH="amd64"; \
+        DAGGER_SHA256="c0a46536fde641f6a4b45529382e1176220d22552c2f9ab0136deaf005e646db"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        DAGGER_ARCH="arm64"; \
+        DAGGER_SHA256="e49f3aa146f3af2c259f94bc335dffe154664eddff4db0adf445d650345e0056"; \
+    else \
+        echo "ERROR: unsupported architecture for the Dagger CLI: $ARCH"; \
+        exit 1; \
+    fi; \
+    cd /tmp; \
+    wget -q -O dagger.tar.gz "https://dl.dagger.io/dagger/releases/${DAGGER_VERSION}/dagger_v${DAGGER_VERSION}_linux_${DAGGER_ARCH}.tar.gz"; \
+    echo "${DAGGER_SHA256}  dagger.tar.gz" | sha256sum -c -; \
+    tar -xzf dagger.tar.gz -C /usr/local/bin dagger; \
+    chmod +x /usr/local/bin/dagger; \
+    rm -f dagger.tar.gz
+# Point the SDK at the baked-in CLI so it never downloads one at runtime.
+ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
+
 RUN apk add --no-cache supervisor && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.

@@ -7,10 +7,15 @@ import {
   isAgentTool,
 } from "@shared";
 import { ZodError, type ZodType } from "zod";
+import config from "@/config";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
+import {
+  toolEntries as codeExecutionToolEntries,
+  tools as codeExecutionTools,
+} from "./code-execution";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import {
   type ArchestraRuntimeToolEntry,
@@ -77,6 +82,7 @@ const toolEntries: Partial<
   ...chatToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
+  ...codeExecutionToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -93,6 +99,8 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
+    // run_python is only advertised when the code runtime is configured on.
+    ...(config.codeRuntime.enabled ? codeExecutionTools : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

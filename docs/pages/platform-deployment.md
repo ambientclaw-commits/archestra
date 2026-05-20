@@ -953,6 +953,39 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
+### Code Execution Runtime
+
+The code execution runtime lets agents run Python scripts through the built-in `archestra__run_python` tool. Each call runs in a throwaway container — nothing persists between calls. It is backed by a Dagger Engine and is disabled by default; once enabled, assign the `run_python` tool to an agent to expose it.
+
+The Dagger Engine runs as a privileged container. Run it on an isolated node pool, away from sensitive workloads, and restrict access to it. Scripts run as a non-root user and have network access, but there is no egress filtering — treat agent-generated code as untrusted.
+
+Deployment by environment:
+
+- **Local dev / Quickstart** — set `ARCHESTRA_CODE_RUNTIME_ENABLED=true`. The SDK provisions an engine through the Docker socket automatically; no other configuration is needed.
+- **Kubernetes** — deploy the Dagger Engine separately with the [Dagger Helm chart](https://docs.dagger.io/reference/deployment/kubernetes/), then point the platform at it via `ARCHESTRA_CODE_RUNTIME_DAGGER_ENGINE_HOST`.
+
+- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enable the code execution runtime and the `run_python` tool.
+  - Default: `false`
+
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_ENGINE_HOST`** - Dagger Engine runner host (sets `_EXPERIMENTAL_DAGGER_RUNNER_HOST`).
+  - Optional: when unset, the SDK provisions an engine through the local Docker socket.
+  - Example: `kube-pod://dagger-engine-abc12?namespace=dagger`
+
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`** - Path to the `dagger` CLI binary (sets `_EXPERIMENTAL_DAGGER_CLI_BIN`).
+  - Optional: the platform Docker image ships a pinned CLI and sets this automatically.
+
+- **`ARCHESTRA_CODE_RUNTIME_IMAGE`** - Container image scripts run in. Must include `python3`.
+  - Default: the MCP server base image.
+
+- **`ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS`** - Hard wall-clock limit per run, and the default when a caller omits one.
+  - Default: `60`
+
+- **`ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT`** - Maximum number of concurrent runs across all conversations.
+  - Default: `10`
+
+- **`ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES`** - stdout and stderr are each truncated to this many bytes.
+  - Default: `65536`
+
 ### Observability & Metrics
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces.
