@@ -67,17 +67,7 @@ const registry = defineArchestraTools([
           "run_python executed",
         );
 
-        return structuredSuccessResult(
-          {
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-            timedOut: result.timedOut,
-            truncated: result.truncated,
-          },
-          formatRunSummary(result),
-        );
+        return structuredSuccessResult(result, formatRunSummary(result));
       } catch (error) {
         if (error instanceof CodeRuntimeError) {
           return errorResult(error.message);
@@ -97,7 +87,7 @@ export const tools = registry.tools;
 function formatRunSummary(result: RunCodeResult): string {
   const lines = [`Exit code: ${result.exitCode} (${result.durationMs} ms)`];
   if (result.timedOut) {
-    lines.push("⚠️ The script was killed by the wall-clock timeout.");
+    lines.push("The script was killed by the wall-clock timeout.");
   }
   lines.push("", "stdout:", result.stdout || "(empty)");
   if (result.stderr) {

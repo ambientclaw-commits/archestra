@@ -99,7 +99,6 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
-    // run_python is only advertised when the code runtime is configured on.
     ...(config.codeRuntime.enabled ? codeExecutionTools : []),
   ];
 

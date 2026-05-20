@@ -8,7 +8,12 @@ import {
   type RunCodeResult,
 } from "./types";
 
-type RuntimeStatus = "disabled" | "initializing" | "ready" | "error";
+type RuntimeStatus =
+  | "disabled"
+  | "initializing"
+  | "ready"
+  | "error"
+  | "stopped";
 type CapturedRun = { stdout: string; stderr: string; exitCode: number };
 
 /**
@@ -84,7 +89,7 @@ class CodeRuntimeService {
   /** Stops accepting new runs. Connect-per-run leaves nothing long-lived to close. */
   async shutdown(): Promise<void> {
     if (this.status === "ready") {
-      this.status = "disabled";
+      this.status = "stopped";
     }
   }
 
