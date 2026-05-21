@@ -20,6 +20,7 @@ export function makeConfig(
       orchestratorK8sRuntime: false,
       codeRuntime: false,
       advancedToolFeaturesEnabled: false,
+      agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

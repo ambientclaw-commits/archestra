@@ -1,10 +1,13 @@
 import asyncio
 import json
+import logging
 import os
 import resource
 import signal
 import sys
 import traceback
+
+logger = logging.getLogger(__name__)
 
 timeout_seconds = int(sys.argv[1])
 max_output_bytes = int(sys.argv[2])
@@ -74,8 +77,12 @@ def apply_limits():
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
     try:
         resource.setrlimit(resource.RLIMIT_NPROC, (max_processes, max_processes))
-    except (AttributeError, ValueError, OSError):
-        pass
+    except AttributeError:
+        logger.exception("RLIMIT_NPROC is unavailable; process limit not applied")
+    except ValueError:
+        logger.exception("RLIMIT_NPROC limit is invalid; process limit not applied")
+    except OSError:
+        logger.exception("failed to apply RLIMIT_NPROC; process limit not applied")
 
 
 async def run():
@@ -107,9 +114,12 @@ async def run():
         timed_out = True
         try:
             os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        try:
+            await process.wait()
         except ProcessLookupError:
             pass
-        await process.wait()
         return_code = 124
 
     await asyncio.gather(stdout_task, stderr_task)

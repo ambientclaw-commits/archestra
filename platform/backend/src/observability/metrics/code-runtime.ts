@@ -20,7 +20,6 @@ let initialized = false;
 
 export function initializeCodeRuntimeMetrics(): void {
   if (initialized) return;
-  initialized = true;
 
   codeRuntimeRunsTotal = new client.Counter({
     name: "code_runtime_runs_total",
@@ -35,11 +34,12 @@ export function initializeCodeRuntimeMetrics(): void {
     buckets: [0.5, 1, 2, 5, 10, 30, 60, 120],
   });
 
+  initialized = true;
   logger.info("Code runtime metrics initialized");
 }
 
 export function reportRun(status: RunStatus, durationSeconds: number): void {
-  if (!codeRuntimeRunsTotal) return;
+  if (!initialized) return;
   codeRuntimeRunsTotal.inc({ status });
   codeRuntimeRunDuration.observe({ status }, durationSeconds);
 }

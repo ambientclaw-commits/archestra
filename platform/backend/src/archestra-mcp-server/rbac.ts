@@ -131,6 +131,7 @@ export const TOOL_PERMISSIONS: Record<
   run_python: null,
 
   // Skills — available to all (read org-wide skills within the chat session)
+  list_skills: null,
   activate_skill: null,
   read_skill_file: null,
 };

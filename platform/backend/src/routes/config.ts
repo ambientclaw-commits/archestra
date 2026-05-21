@@ -64,6 +64,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               orchestratorK8sRuntime: z.boolean(),
               codeRuntime: z.boolean(),
               advancedToolFeaturesEnabled: z.boolean(),
+              agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -108,6 +109,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           codeRuntime: codeRuntimeService.isEnabled,
           advancedToolFeaturesEnabled:
             config.agents.advancedToolFeaturesEnabled,
+          agentSkillsEnabled: config.agents.skillsEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),

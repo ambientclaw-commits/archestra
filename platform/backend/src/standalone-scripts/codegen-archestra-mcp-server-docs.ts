@@ -132,6 +132,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   run_tool: ToolGroup.Meta,
 
   run_python: ToolGroup.CodeExecution,
+  list_skills: ToolGroup.Skills,
   activate_skill: ToolGroup.Skills,
   read_skill_file: ToolGroup.Skills,
 };
