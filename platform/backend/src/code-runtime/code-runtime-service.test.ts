@@ -1,8 +1,12 @@
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test, vi } from "@/test";
 import { codeRuntimeService } from "./code-runtime-service";
 import { CodeRuntimeError } from "./types";
 
 describe("codeRuntimeService", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   test("is disabled when ARCHESTRA_CODE_RUNTIME_ENABLED is unset", () => {
     expect(codeRuntimeService.isEnabled).toBe(false);
     expect(codeRuntimeService.isReady).toBe(false);
@@ -12,5 +16,22 @@ describe("codeRuntimeService", () => {
     await expect(
       codeRuntimeService.run({ code: "print('hello')" }),
     ).rejects.toBeInstanceOf(CodeRuntimeError);
+  });
+
+  test.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+  ])("run() rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
+    vi.resetModules();
+    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
+    const { codeRuntimeService: enabledCodeRuntimeService } = await import(
+      "./code-runtime-service"
+    );
+
+    await expect(
+      enabledCodeRuntimeService.run({ code: "print('hello')", timeoutSeconds }),
+    ).rejects.toThrow("timeoutSeconds must");
   });
 });

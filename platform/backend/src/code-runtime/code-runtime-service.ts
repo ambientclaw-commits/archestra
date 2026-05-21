@@ -1,4 +1,12 @@
-import { connect, ReturnType as DaggerReturnType } from "@dagger.io/dagger";
+import {
+  CacheSharingMode,
+  type Client,
+  type ConnectOpts,
+  type Container,
+  connect,
+  ReturnType as DaggerReturnType,
+} from "@dagger.io/dagger";
+import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import * as metrics from "@/observability/metrics";
@@ -20,25 +28,30 @@ type CapturedRun = {
   stderr: string;
   exitCode: number;
   truncated: boolean;
+  timedOut: boolean;
 };
 type ValidatedRunParams = { code: string; requirements: string[] };
 
 class CodeRuntimeBackstopError extends CodeRuntimeError {
-  constructor(readonly pipeline: Promise<void>) {
+  constructor(readonly pipeline: Promise<unknown>) {
     super("the code run exceeded its time budget");
   }
 }
 
 /**
- * Runs agent-provided Python scripts in throwaway Dagger containers.
+ * runs agent-provided Python scripts in throwaway Dagger containers.
  *
- * One container per call (stateless — nothing persists between calls). The
- * Dagger Engine caches the base image across calls; concurrency across
- * conversations is capped by a semaphore.
+ * each call gets a fresh container filesystem; only Dagger-managed base image
+ * and uv package caches persist across calls. concurrency across conversations
+ * is capped by a semaphore.
  */
 class CodeRuntimeService {
   private status: RuntimeStatus = "disabled";
+  private baseContainer: Container | null = null;
+  private client: Client | null = null;
   private initPromise: Promise<void> | null = null;
+  private sessionPromise: Promise<void> | null = null;
+  private stopSession: (() => void) | null = null;
   private lastInitAttemptAt = 0;
   private activeRuns = 0;
   private readonly waiters: Array<() => void> = [];
@@ -54,7 +67,7 @@ class CodeRuntimeService {
   }
 
   /**
-   * Connects to the Dagger Engine and pre-pulls the base image so the first
+   * connects to the Dagger Engine and pre-pulls the base image so the first
    * real run is fast. Idempotent and safe to call from any process — the first
    * call does the work, later calls await it. Never throws.
    */
@@ -85,7 +98,7 @@ class CodeRuntimeService {
   }
 
   /**
-   * Executes a Python script and returns its output. Throws
+   * executes a Python script and returns its output. Throws
    * {@link CodeRuntimeError} when the run cannot be performed; a non-zero
    * script exit is a normal result.
    */
@@ -94,6 +107,7 @@ class CodeRuntimeService {
       throw new CodeRuntimeError("the code runtime is not enabled");
     }
     const runParams = validateRunParams(params);
+    const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
     // lazily initialize so scheduled-agent runs in worker processes work too.
     await this.init();
     if (this.status === "stopped") {
@@ -105,14 +119,17 @@ class CodeRuntimeService {
       );
     }
 
-    const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
     const startedAt = Date.now();
     let acquired = false;
-    let releaseWhenSettled: Promise<void> | null = null;
+    let releaseWhenSettled: Promise<unknown> | null = null;
     try {
       await this.acquire();
       acquired = true;
-      const result = await this.execute(runParams, timeoutSeconds, startedAt);
+      const result = await this.execute({
+        params: runParams,
+        startedAt,
+        timeoutSeconds,
+      });
       metrics.codeRuntime.reportRun(
         result.timedOut
           ? "timeout"
@@ -151,11 +168,12 @@ class CodeRuntimeService {
     }
   }
 
-  /** stops accepting new runs. connect-per-run leaves nothing long-lived to close. */
+  /** stops accepting new runs and closes the long-lived Dagger session. */
   async shutdown(): Promise<void> {
-    if (this.status === "ready") {
+    if (this.status !== "disabled") {
       this.status = "stopped";
     }
+    await this.closeDaggerSession();
   }
 
   // === private ===
@@ -167,16 +185,78 @@ class CodeRuntimeService {
     }
 
     this.applyDaggerEnv();
+    await this.closeDaggerSession();
     this.lastInitAttemptAt = Date.now();
     this.status = "initializing";
-    try {
-      await connect(async (client) => {
-        await client.container().from(config.codeRuntime.image).sync();
+
+    let readySettled = false;
+    let resolveReady!: () => void;
+    let rejectReady!: (error: unknown) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = () => {
+        if (readySettled) return;
+        readySettled = true;
+        resolve();
+      };
+      rejectReady = (error) => {
+        if (readySettled) return;
+        readySettled = true;
+        reject(error);
+      };
+    });
+
+    let closeSession!: () => void;
+    const sessionClosed = new Promise<void>((resolve) => {
+      closeSession = resolve;
+    });
+    this.stopSession = closeSession;
+
+    const sessionPromise = connect(async (client) => {
+      this.client = client;
+      try {
+        const warmedContainer = await warmBaseContainer(
+          buildBaseContainer(client),
+        ).sync();
+        if (this.client === client) {
+          this.baseContainer = warmedContainer;
+        }
+        resolveReady();
+        await sessionClosed;
+      } catch (error) {
+        rejectReady(error);
+        throw error;
+      } finally {
+        if (this.client === client) {
+          this.baseContainer = null;
+          this.client = null;
+        }
+        if (this.stopSession === closeSession) {
+          this.stopSession = null;
+        }
+      }
+    }, DAGGER_CONNECT_OPTS)
+      .catch((error) => {
+        rejectReady(error);
+        if (this.status !== "stopped") {
+          this.status = "error";
+        }
+      })
+      .finally(() => {
+        if (this.sessionPromise === sessionPromise) {
+          this.sessionPromise = null;
+        }
+        if (this.status === "ready") {
+          this.status = "error";
+        }
       });
+    this.sessionPromise = sessionPromise;
+
+    try {
+      await ready;
       this.status = "ready";
       logger.info(
         { image: config.codeRuntime.image },
-        "[CodeRuntime] ready — base image pre-warmed",
+        "[CodeRuntime] ready — base image and default packages pre-warmed",
       );
     } catch (error) {
       this.status = "error";
@@ -187,52 +267,28 @@ class CodeRuntimeService {
     }
   }
 
-  private async execute(
-    params: ValidatedRunParams,
-    timeoutSeconds: number,
-    startedAt: number,
-  ): Promise<RunCodeResult> {
-    // the connect() callback can only return void, so the captured output is
-    // flowed out through a promise rather than a closure-mutated variable.
-    let resolveRun!: (value: CapturedRun) => void;
-    const runResult = new Promise<CapturedRun>((resolve) => {
-      resolveRun = resolve;
-    });
+  private async execute({
+    params,
+    startedAt,
+    timeoutSeconds,
+  }: {
+    params: ValidatedRunParams;
+    startedAt: number;
+    timeoutSeconds: number;
+  }): Promise<RunCodeResult> {
+    const client = this.client;
+    const baseContainer = this.baseContainer;
+    if (!client || !baseContainer) {
+      this.status = "error";
+      throw new CodeRuntimeError(
+        "the code runtime is not available (engine unreachable)",
+      );
+    }
 
-    const pipeline = connect(async (client) => {
-      const container = client
-        .container()
-        .from(config.codeRuntime.image)
-        .withWorkdir(WORKDIR)
-        .withUser(NON_ROOT_USER)
-        .withEnvVariable("HOME", WORKDIR)
-        .withEnvVariable("UV_CACHE_DIR", `${WORKDIR}/uv-cache`)
-        .withNewFile(`${WORKDIR}/${SCRIPT_FILE}`, params.code)
-        .withNewFile(`${WORKDIR}/${RUNNER_FILE}`, RUNNER_SCRIPT)
-        .withExec(buildRunnerArgs(params.requirements, timeoutSeconds), {
-          expect: DaggerReturnType.Any,
-        });
-      const [stdout, stderr, exitCodeText, stdoutTruncated, stderrTruncated] =
-        await Promise.all([
-          container.file(STDOUT_FILE).contents(),
-          container.file(STDERR_FILE).contents(),
-          container.file(EXIT_CODE_FILE).contents(),
-          container.file(STDOUT_TRUNCATED_FILE).contents(),
-          container.file(STDERR_TRUNCATED_FILE).contents(),
-        ]);
-      const exitCode = Number.parseInt(exitCodeText.trim(), 10);
-      if (Number.isNaN(exitCode)) {
-        throw new CodeRuntimeError(
-          "the code runtime returned an invalid exit code",
-        );
-      }
-      resolveRun({
-        stdout,
-        stderr,
-        exitCode,
-        truncated:
-          stdoutTruncated.trim() === "1" || stderrTruncated.trim() === "1",
-      });
+    const pipeline = this.executeWithClient({
+      baseContainer,
+      params,
+      timeoutSeconds,
     });
 
     // the in-container `timeout` should always fire first; this backstop only
@@ -240,23 +296,50 @@ class CodeRuntimeService {
     const backstopMs = (timeoutSeconds + BACKSTOP_BUFFER_SECONDS) * 1000;
     if ((await raceWithTimeout(pipeline, backstopMs)) === "timeout") {
       this.status = "error";
+      void this.closeDaggerSession();
       throw new CodeRuntimeBackstopError(pipeline);
     }
 
-    // pipeline settled without timing out → the callback resolved runResult.
-    const run = await runResult;
+    const run = await pipeline;
     return {
       stdout: run.stdout,
       stderr: run.stderr,
       exitCode: run.exitCode,
       durationMs: Date.now() - startedAt,
-      timedOut: TIMEOUT_EXIT_CODES.has(run.exitCode),
+      timedOut: run.timedOut,
       truncated: run.truncated,
     };
   }
 
+  private async executeWithClient({
+    baseContainer,
+    params,
+    timeoutSeconds,
+  }: {
+    baseContainer: Container;
+    params: ValidatedRunParams;
+    timeoutSeconds: number;
+  }): Promise<CapturedRun> {
+    const container = baseContainer
+      .withNewFile(`${WORKDIR}/${SCRIPT_FILE}`, params.code)
+      .withNewFile(`${WORKDIR}/${RUNNER_FILE}`, RUNNER_SCRIPT)
+      .withExec(buildRunnerArgs(params.requirements, timeoutSeconds), {
+        expect: DaggerReturnType.Any,
+      });
+    return parseCapturedRun(await container.file(RESULT_FILE).contents());
+  }
+
+  private async closeDaggerSession(): Promise<void> {
+    this.baseContainer = null;
+    this.client = null;
+    this.stopSession?.();
+    await this.sessionPromise?.catch((error) => {
+      logger.error({ err: error }, "[CodeRuntime] Dagger session failed");
+    });
+  }
+
   /**
-   * Points the Dagger SDK at a pre-deployed engine and a baked-in CLI so it
+   * points the Dagger SDK at a pre-deployed engine and a baked-in CLI so it
    * never tries to provision its own or download the CLI at runtime.
    */
   private applyDaggerEnv(): void {
@@ -271,7 +354,13 @@ class CodeRuntimeService {
 
   private resolveTimeout(requested: number | undefined): number {
     const max = config.codeRuntime.timeoutSeconds;
-    if (!requested || requested <= 0) return max;
+    if (requested === undefined) return max;
+    if (!Number.isFinite(requested) || !Number.isInteger(requested)) {
+      throw new CodeRuntimeError("timeoutSeconds must be a finite integer");
+    }
+    if (requested <= 0) {
+      throw new CodeRuntimeError("timeoutSeconds must be positive");
+    }
     return Math.min(requested, max);
   }
 
@@ -307,53 +396,194 @@ export const codeRuntimeService = new CodeRuntimeService();
 /** scripts run from /tmp — world-writable, so the non-root image user can write there. */
 const WORKDIR = "/tmp";
 const SCRIPT_FILE = "main.py";
-const RUNNER_FILE = "runner.sh";
-const STDOUT_FILE = `${WORKDIR}/stdout.txt`;
-const STDERR_FILE = `${WORKDIR}/stderr.txt`;
-const EXIT_CODE_FILE = `${WORKDIR}/exit-code.txt`;
-const STDOUT_TRUNCATED_FILE = `${WORKDIR}/stdout-truncated.txt`;
-const STDERR_TRUNCATED_FILE = `${WORKDIR}/stderr-truncated.txt`;
+const RUNNER_FILE = "runner.py";
+const RESULT_FILE = `${WORKDIR}/result.json`;
+const UV_CACHE_DIR = `${WORKDIR}/uv-cache`;
+const UV_CACHE_KEY = "archestra-code-runtime-uv-cache-v1";
+const VENV_DIR = `${WORKDIR}/.venv`;
+const VENV_PYTHON = `${VENV_DIR}/bin/python`;
 const NON_ROOT_USER = "1000:1000";
+const DAGGER_CONNECT_OPTS = {
+  LoadWorkspaceModules: false,
+  Workdir: "/",
+} satisfies ConnectOpts;
 /** extra time beyond the script's own timeout before the hung-run backstop fires. */
 const BACKSTOP_BUFFER_SECONDS = 60;
 const INIT_RETRY_COOLDOWN_MS = 10_000;
-/** exit codes coreutils/busybox `timeout` reports when it kills the script. */
-const TIMEOUT_EXIT_CODES = new Set([124, 137]);
 
-const RUNNER_SCRIPT = `#!/bin/sh
-set -u
+const DEFAULT_REQUIREMENTS = ["numpy", "pandas", "httpx"] as const;
 
-timeout_seconds="$1"
-max_output_bytes="$2"
-shift 2
+function buildBaseContainer(client: Client): Container {
+  return (
+    client
+      .container()
+      .from(config.codeRuntime.image)
+      .withWorkdir(WORKDIR)
+      .withUser(NON_ROOT_USER)
+      .withEnvVariable("HOME", WORKDIR)
+      .withEnvVariable("UV_CACHE_DIR", UV_CACHE_DIR)
+      // shared, not locked: uv's cache is concurrency-safe, so serializing
+      // runs on it would defeat the maxConcurrent semaphore.
+      .withMountedCache(UV_CACHE_DIR, client.cacheVolume(UV_CACHE_KEY), {
+        owner: NON_ROOT_USER,
+        sharing: CacheSharingMode.Shared,
+      })
+  );
+}
 
-stdout_raw="${WORKDIR}/stdout.raw"
-stderr_raw="${WORKDIR}/stderr.raw"
+function warmBaseContainer(container: Container): Container {
+  return container
+    .withExec(["uv", "venv", VENV_DIR])
+    .withExec([
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      VENV_PYTHON,
+      ...DEFAULT_REQUIREMENTS,
+    ]);
+}
 
-timeout -s KILL "$timeout_seconds" uv run "$@" python3 "${SCRIPT_FILE}" > "$stdout_raw" 2> "$stderr_raw"
-exit_code=$?
+const RUNNER_SCRIPT = `import asyncio
+import json
+import os
+import resource
+import signal
+import sys
+import traceback
 
-head -c "$max_output_bytes" "$stdout_raw" > "${STDOUT_FILE}"
-head -c "$max_output_bytes" "$stderr_raw" > "${STDERR_FILE}"
+timeout_seconds = int(sys.argv[1])
+max_output_bytes = int(sys.argv[2])
+cpu_seconds = int(sys.argv[3])
+memory_bytes = int(sys.argv[4])
+max_processes = int(sys.argv[5])
+uv_args = sys.argv[6:]
 
-stdout_bytes=$(wc -c < "$stdout_raw")
-stderr_bytes=$(wc -c < "$stderr_raw")
 
-if [ "$stdout_bytes" -gt "$max_output_bytes" ]; then
-  printf 1 > "${STDOUT_TRUNCATED_FILE}"
-else
-  printf 0 > "${STDOUT_TRUNCATED_FILE}"
-fi
+def write_text(path, value):
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(value)
 
-if [ "$stderr_bytes" -gt "$max_output_bytes" ]; then
-  printf 1 > "${STDERR_TRUNCATED_FILE}"
-else
-  printf 0 > "${STDERR_TRUNCATED_FILE}"
-fi
 
-printf "%s" "$exit_code" > "${EXIT_CODE_FILE}"
-exit 0
+def finalize(stdout_data, stderr_data, exit_code, truncated, timed_out):
+    stdout_text = stdout_data.decode("utf-8", errors="replace")
+    stderr_text = stderr_data.decode("utf-8", errors="replace")
+    if truncated["stdout"]:
+        stdout_text += "\\n...[output truncated]"
+    if truncated["stderr"]:
+        stderr_text += "\\n...[output truncated]"
+
+    write_text("${RESULT_FILE}", json.dumps({
+        "stdout": stdout_text,
+        "stderr": stderr_text,
+        "exitCode": exit_code,
+        "truncated": truncated["stdout"] or truncated["stderr"],
+        "timedOut": timed_out,
+    }, ensure_ascii=False))
+
+
+def append_output(buffer, truncated, stream_name, chunk):
+    remaining = max_output_bytes - len(buffer)
+    if remaining > 0:
+        buffer.extend(chunk[:remaining])
+    if len(chunk) > remaining:
+        truncated[stream_name] = True
+
+
+async def read_stream(stream, buffer, truncated, stream_name):
+    while True:
+        chunk = await stream.read(8192)
+        if not chunk:
+            return
+        append_output(buffer, truncated, stream_name, chunk)
+
+
+def normalize_exit_code(return_code):
+    if return_code < 0:
+        return 128 + abs(return_code)
+    return return_code
+
+
+def apply_limits():
+    os.setsid()
+    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
+    try:
+        resource.setrlimit(resource.RLIMIT_NPROC, (max_processes, max_processes))
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
+async def run():
+    command = ["uv", "run", "--python", "${VENV_PYTHON}", *uv_args, "python3", "${SCRIPT_FILE}"]
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        cwd="${WORKDIR}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        preexec_fn=apply_limits,
+    )
+    if process.stdout is None or process.stderr is None:
+        raise RuntimeError("failed to capture subprocess output")
+
+    stdout_buffer = bytearray()
+    stderr_buffer = bytearray()
+    truncated = {"stdout": False, "stderr": False}
+    stdout_task = asyncio.create_task(
+        read_stream(process.stdout, stdout_buffer, truncated, "stdout")
+    )
+    stderr_task = asyncio.create_task(
+        read_stream(process.stderr, stderr_buffer, truncated, "stderr")
+    )
+
+    try:
+        return_code = await asyncio.wait_for(process.wait(), timeout_seconds)
+        timed_out = False
+    except asyncio.TimeoutError:
+        timed_out = True
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        await process.wait()
+        return_code = 124
+
+    await asyncio.gather(stdout_task, stderr_task)
+
+    if not timed_out:
+        return_code = normalize_exit_code(return_code)
+    finalize(stdout_buffer, stderr_buffer, return_code, truncated, timed_out)
+
+
+try:
+    asyncio.run(run())
+except BaseException:
+    no_truncation = {"stdout": False, "stderr": False}
+    finalize(b"", traceback.format_exc().encode("utf-8", errors="replace"), 127, no_truncation, False)
 `;
+
+const CapturedRunSchema = z.object({
+  exitCode: z.number().int(),
+  stderr: z.string(),
+  stdout: z.string(),
+  timedOut: z.boolean(),
+  truncated: z.boolean(),
+});
+
+function parseCapturedRun(raw: string): CapturedRun {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw) as unknown;
+  } catch {
+    throw new CodeRuntimeError("the code runtime returned invalid JSON");
+  }
+
+  const result = CapturedRunSchema.safeParse(decoded);
+  if (!result.success) {
+    throw new CodeRuntimeError("the code runtime returned an invalid result");
+  }
+  return result.data;
+}
 
 function validateRunParams(params: RunCodeParams): ValidatedRunParams {
   const codeBytes = Buffer.byteLength(params.code, "utf8");
@@ -402,10 +632,13 @@ function buildRunnerArgs(
   timeoutSeconds: number,
 ): string[] {
   return [
-    "sh",
+    "python3",
     `${WORKDIR}/${RUNNER_FILE}`,
     String(timeoutSeconds),
     String(config.codeRuntime.maxOutputBytes),
+    String(CODE_RUNTIME_LIMITS.maxCpuSeconds),
+    String(CODE_RUNTIME_LIMITS.maxMemoryBytes),
+    String(CODE_RUNTIME_LIMITS.maxProcesses),
     ...requirements.flatMap((requirement) => ["--with", requirement]),
   ];
 }
@@ -415,7 +648,7 @@ function formatBytes(bytes: number): string {
 }
 
 async function raceWithTimeout(
-  work: Promise<void>,
+  work: Promise<unknown>,
   ms: number,
 ): Promise<"done" | "timeout"> {
   let timer: ReturnType<typeof setTimeout> | undefined;

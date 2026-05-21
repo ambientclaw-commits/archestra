@@ -8,6 +8,10 @@
 # pinned to the dagger CLI/SDK version — engine and client must match, so an
 # unpinned chart could deploy an engine the SDK refuses to talk to.
 DAGGER_VERSION = '0.20.8'
+DAGGER_HELM_SET_ARGS = [
+  'engine.readinessProbeSettings.periodSeconds=60',
+  'engine.livenessProbeSettings.periodSeconds=120',
+]
 
 # the chart renders a namespaced DaemonSet; create its namespace alongside it.
 k8s_yaml(blob('''apiVersion: v1
@@ -20,7 +24,7 @@ metadata:
 # mcp-rbac resources in Tiltfile.dev.
 k8s_yaml(local(
   'helm template dagger oci://registry.dagger.io/dagger-helm --version ' +
-  DAGGER_VERSION + ' --namespace dagger',
+  DAGGER_VERSION + ' --namespace dagger --set ' + ','.join(DAGGER_HELM_SET_ARGS),
   quiet=True,
 ))
 
