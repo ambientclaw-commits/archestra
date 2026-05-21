@@ -10,6 +10,7 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import * as metrics from "@/observability/metrics";
+import runnerScript from "./runner.py";
 import {
   CODE_RUNTIME_LIMITS,
   CodeRuntimeError,
@@ -322,8 +323,8 @@ class CodeRuntimeService {
     timeoutSeconds: number;
   }): Promise<CapturedRun> {
     const container = baseContainer
+      .withNewFile(`${WORKDIR}/${RUNNER_FILE}`, runnerScript)
       .withNewFile(`${WORKDIR}/${SCRIPT_FILE}`, params.code)
-      .withNewFile(`${WORKDIR}/${RUNNER_FILE}`, RUNNER_SCRIPT)
       .withExec(buildRunnerArgs(params.requirements, timeoutSeconds), {
         expect: DaggerReturnType.Any,
       });
@@ -456,124 +457,6 @@ function warmBaseContainer(container: Container): Container {
     ]);
 }
 
-const RUNNER_SCRIPT = `import asyncio
-import json
-import os
-import resource
-import signal
-import sys
-import traceback
-
-timeout_seconds = int(sys.argv[1])
-max_output_bytes = int(sys.argv[2])
-cpu_seconds = int(sys.argv[3])
-memory_bytes = int(sys.argv[4])
-max_processes = int(sys.argv[5])
-uv_args = sys.argv[6:]
-
-
-def write_text(path, value):
-    with open(path, "w", encoding="utf-8") as file:
-        file.write(value)
-
-
-def finalize(stdout_data, stderr_data, exit_code, truncated, timed_out):
-    stdout_text = stdout_data.decode("utf-8", errors="replace")
-    stderr_text = stderr_data.decode("utf-8", errors="replace")
-    if truncated["stdout"]:
-        stdout_text += "\\n...[output truncated]"
-    if truncated["stderr"]:
-        stderr_text += "\\n...[output truncated]"
-
-    write_text("${RESULT_FILE}", json.dumps({
-        "stdout": stdout_text,
-        "stderr": stderr_text,
-        "exitCode": exit_code,
-        "truncated": truncated["stdout"] or truncated["stderr"],
-        "timedOut": timed_out,
-    }, ensure_ascii=False))
-
-
-def append_output(buffer, truncated, stream_name, chunk):
-    remaining = max_output_bytes - len(buffer)
-    if remaining > 0:
-        buffer.extend(chunk[:remaining])
-    if len(chunk) > remaining:
-        truncated[stream_name] = True
-
-
-async def read_stream(stream, buffer, truncated, stream_name):
-    while True:
-        chunk = await stream.read(8192)
-        if not chunk:
-            return
-        append_output(buffer, truncated, stream_name, chunk)
-
-
-def normalize_exit_code(return_code):
-    if return_code < 0:
-        return 128 + abs(return_code)
-    return return_code
-
-
-def apply_limits():
-    os.setsid()
-    resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
-    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
-    try:
-        resource.setrlimit(resource.RLIMIT_NPROC, (max_processes, max_processes))
-    except (AttributeError, ValueError, OSError):
-        pass
-
-
-async def run():
-    command = ["uv", "run", "--python", "${VENV_PYTHON}", *uv_args, "python3", "${SCRIPT_FILE}"]
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        cwd="${WORKDIR}",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        preexec_fn=apply_limits,
-    )
-    if process.stdout is None or process.stderr is None:
-        raise RuntimeError("failed to capture subprocess output")
-
-    stdout_buffer = bytearray()
-    stderr_buffer = bytearray()
-    truncated = {"stdout": False, "stderr": False}
-    stdout_task = asyncio.create_task(
-        read_stream(process.stdout, stdout_buffer, truncated, "stdout")
-    )
-    stderr_task = asyncio.create_task(
-        read_stream(process.stderr, stderr_buffer, truncated, "stderr")
-    )
-
-    try:
-        return_code = await asyncio.wait_for(process.wait(), timeout_seconds)
-        timed_out = False
-    except asyncio.TimeoutError:
-        timed_out = True
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        await process.wait()
-        return_code = 124
-
-    await asyncio.gather(stdout_task, stderr_task)
-
-    if not timed_out:
-        return_code = normalize_exit_code(return_code)
-    finalize(stdout_buffer, stderr_buffer, return_code, truncated, timed_out)
-
-
-try:
-    asyncio.run(run())
-except BaseException:
-    no_truncation = {"stdout": False, "stderr": False}
-    finalize(b"", traceback.format_exc().encode("utf-8", errors="replace"), 127, no_truncation, False)
-`;
-
 const CapturedRunSchema = z.object({
   exitCode: z.number().int(),
   stderr: z.string(),
@@ -651,6 +534,10 @@ function buildRunnerArgs(
     String(CODE_RUNTIME_LIMITS.maxCpuSeconds),
     String(CODE_RUNTIME_LIMITS.maxMemoryBytes),
     String(CODE_RUNTIME_LIMITS.maxProcesses),
+    RESULT_FILE,
+    WORKDIR,
+    VENV_PYTHON,
+    SCRIPT_FILE,
     ...requirements.flatMap((requirement) => ["--with", requirement]),
   ];
 }
