@@ -31,6 +31,7 @@ enum ToolGroup {
   Chat = "Chat",
   Meta = "Meta",
   CodeExecution = "Code Execution",
+  Skills = "Skills",
 }
 
 const groupOrder: Record<ToolGroup, number> = {
@@ -46,6 +47,7 @@ const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Chat]: 9,
   [ToolGroup.Meta]: 10,
   [ToolGroup.CodeExecution]: 11,
+  [ToolGroup.Skills]: 12,
 };
 
 /**
@@ -130,6 +132,8 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   run_tool: ToolGroup.Meta,
 
   run_python: ToolGroup.CodeExecution,
+  activate_skill: ToolGroup.Skills,
+  read_skill_file: ToolGroup.Skills,
 };
 
 // === Script entry point ===

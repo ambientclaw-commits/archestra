@@ -56,6 +56,7 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
+import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
@@ -83,6 +84,7 @@ const toolEntries: Partial<
   ...searchToolEntries,
   ...runToolEntries,
   ...codeExecutionToolEntries,
+  ...skillToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -100,6 +102,7 @@ export function getArchestraMcpTools() {
     ...searchToolTools,
     ...runToolTools,
     ...(config.codeRuntime.enabled ? codeExecutionTools : []),
+    ...skillTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
