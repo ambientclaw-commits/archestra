@@ -18,6 +18,9 @@ metadata:
 k8s_yaml(local(
   'helm template dagger-runtime ../helm/dagger-runtime --namespace dagger ' +
   '--set networkPolicy.create=false ' +
+  # the production default request (8Gi) does not fit a default colima VM;
+  # 4Gi is plenty for local code-runtime use.
+  '--set dagger.engine.resources.requests.memory=4Gi ' +
   '--set dagger.engine.readinessProbeSettings.periodSeconds=60 ' +
   '--set dagger.engine.livenessProbeSettings.periodSeconds=120',
   quiet=True,
