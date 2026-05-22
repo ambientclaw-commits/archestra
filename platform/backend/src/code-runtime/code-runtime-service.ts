@@ -10,7 +10,6 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import * as metrics from "@/observability/metrics";
-import runnerScript from "./runner.py";
 import {
   CODE_RUNTIME_LIMITS,
   CodeRuntimeError,
@@ -322,6 +321,7 @@ class CodeRuntimeService {
     params: ValidatedRunParams;
     timeoutSeconds: number;
   }): Promise<CapturedRun> {
+    const runnerScript = await loadRunnerScript();
     const container = baseContainer
       .withNewFile(`${WORKDIR}/${RUNNER_FILE}`, runnerScript)
       .withNewFile(`${WORKDIR}/${SCRIPT_FILE}`, params.code)
@@ -409,6 +409,15 @@ const WORKDIR = "/tmp";
 const SCRIPT_FILE = "main.py";
 const RUNNER_FILE = "runner.py";
 const RESULT_FILE = `${WORKDIR}/result.json`;
+let runnerScriptPromise: Promise<string> | null = null;
+
+async function loadRunnerScript(): Promise<string> {
+  runnerScriptPromise ??= import("./runner.py").then(
+    (module) => module.default,
+  );
+  return runnerScriptPromise;
+}
+
 const UV_CACHE_DIR = `${WORKDIR}/uv-cache`;
 const UV_CACHE_KEY = "archestra-code-runtime-uv-cache-v1";
 const VENV_DIR = `${WORKDIR}/.venv`;

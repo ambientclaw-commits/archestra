@@ -46839,6 +46839,7 @@ export type GetSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;
@@ -46853,6 +46854,11 @@ export type GetSkillsResponses = {
             createdAt: string;
             updatedAt: string;
             fileCount: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -46875,6 +46881,8 @@ export type CreateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -46954,6 +46962,7 @@ export type CreateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -46975,6 +46984,10 @@ export type CreateSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47148,6 +47161,7 @@ export type GetSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -47170,6 +47184,10 @@ export type GetSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
@@ -47183,6 +47201,8 @@ export type UpdateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -47264,6 +47284,7 @@ export type UpdateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
@@ -47285,6 +47306,10 @@ export type UpdateSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47663,6 +47688,8 @@ export type ImportGithubSkillsData = {
         path?: string;
         githubToken?: string;
         skillPaths: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -47743,6 +47770,7 @@ export type ImportGithubSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;

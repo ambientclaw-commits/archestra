@@ -126,14 +126,14 @@ export const TOOL_PERMISSIONS: Record<
   search_tools: null,
   run_tool: null,
 
-  // Code execution — gated by explicit tool assignment + the codeRuntime
+  // code execution — gated by explicit tool assignment + the codeRuntime
   // feature flag (the RBAC model has no "execute" action).
   run_python: null,
 
-  // Skills — available to all (read org-wide skills within the chat session)
-  list_skills: null,
-  activate_skill: null,
-  read_skill_file: null,
+  // skills — require skill:read; handlers further filter by per-skill scope.
+  list_skills: { resource: "skill", action: "read" },
+  activate_skill: { resource: "skill", action: "read" },
+  read_skill_file: { resource: "skill", action: "read" },
 };
 
 /**
