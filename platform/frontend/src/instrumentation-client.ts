@@ -4,14 +4,16 @@
 
 import * as Sentry from "@sentry/nextjs";
 import config from "@/lib/config/config";
-import { getFrontendBrowserSentryOptions } from "../sentry.shared";
+import {
+  getFrontendBrowserSentryOptions,
+  isAllowedSentryEnvironment,
+} from "../sentry.shared";
 
 const {
   sentry: { dsn, environment },
 } = config;
 
-// Only initialize Sentry if DSN is configured
-if (dsn) {
+if (dsn && isAllowedSentryEnvironment(environment)) {
   const browserOptions = getFrontendBrowserSentryOptions({ dsn, environment });
 
   Sentry.init({
