@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { normalizeChatMessages } from "./normalize-chat-messages";
+import {
+  normalizeChatMessages,
+  normalizeChatMessagesForStorage,
+} from "./normalize-chat-messages";
 
 describe("normalizeChatMessages", () => {
   test("dedupes duplicate tool parts with the same toolCallId", () => {
@@ -98,5 +101,53 @@ describe("normalizeChatMessages", () => {
     const result = normalizeChatMessages(messages);
 
     expect(result[0].parts).toHaveLength(2);
+  });
+
+  test("replaces data URL file parts when normalizing messages for storage", () => {
+    const messages = [
+      {
+        id: "msg1",
+        role: "user" as const,
+        parts: [
+          { type: "text", text: "Please inspect this file." },
+          {
+            type: "file",
+            url: "data:application/pdf;base64,abc123",
+            mediaType: "application/pdf",
+            filename: "test.pdf",
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessagesForStorage(messages);
+
+    expect(result[0].parts).toEqual([
+      { type: "text", text: "Please inspect this file." },
+      {
+        type: "text",
+        text: "[File attachment omitted from stored chat history]",
+      },
+    ]);
+  });
+
+  test("preserves data URL file parts when normalizing messages for the model", () => {
+    const messages = [
+      {
+        id: "msg1",
+        role: "user" as const,
+        parts: [
+          {
+            type: "file",
+            url: "data:application/pdf;base64,abc123",
+            mediaType: "application/pdf",
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result[0].parts).toEqual(messages[0].parts);
   });
 });

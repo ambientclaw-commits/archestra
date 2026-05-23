@@ -7,8 +7,31 @@ vi.mock("@sentry/nextjs", () => ({
 describe("next config rewrites", () => {
   beforeEach(() => {
     vi.resetModules();
+    delete process.env.ARCHESTRA_API_BODY_LIMIT;
     delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
     delete process.env.VERSION;
+  });
+
+  it("matches the backend request body limit for proxied client uploads by default", async () => {
+    const { default: nextConfig } = await import("../next.config");
+
+    expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe("70mb");
+  });
+
+  it("uses ARCHESTRA_API_BODY_LIMIT for proxied client uploads when configured", async () => {
+    process.env.ARCHESTRA_API_BODY_LIMIT = "100mb";
+
+    const { default: nextConfig } = await import("../next.config");
+
+    expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe("100mb");
+  });
+
+  it("supports numeric ARCHESTRA_API_BODY_LIMIT values as bytes for proxied client uploads", async () => {
+    process.env.ARCHESTRA_API_BODY_LIMIT = "52428800";
+
+    const { default: nextConfig } = await import("../next.config");
+
+    expect(nextConfig.experimental?.proxyClientMaxBodySize).toBe(52428800);
   });
 
   it("uses sanitized VERSION as the deployment id", async () => {

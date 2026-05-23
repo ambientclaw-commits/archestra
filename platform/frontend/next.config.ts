@@ -4,6 +4,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
 
+type ProxyClientMaxBodySize = NonNullable<
+  NonNullable<NextConfig["experimental"]>["proxyClientMaxBodySize"]
+>;
+
 const platformPkg = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../package.json"), "utf-8"),
 ) as { name: string; version: string };
@@ -44,6 +48,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
+    proxyClientMaxBodySize: getProxyClientMaxBodySize(),
   },
   httpAgentOptions: {
     keepAlive: true,
@@ -103,6 +108,20 @@ function getAllowedDevOrigins(): string[] {
         return value;
       }
     });
+}
+
+function getProxyClientMaxBodySize(): ProxyClientMaxBodySize {
+  const bodyLimit = process.env.ARCHESTRA_API_BODY_LIMIT?.trim();
+
+  if (!bodyLimit) {
+    return "70mb";
+  }
+
+  if (/^\d+$/.test(bodyLimit)) {
+    return Number(bodyLimit);
+  }
+
+  return bodyLimit as ProxyClientMaxBodySize;
 }
 
 export default withSentryConfig(nextConfig, {

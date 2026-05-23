@@ -98,7 +98,10 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { injectSkillActivation } from "./inject-skill-activation";
-import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+import {
+  normalizeChatMessages,
+  normalizeChatMessagesForStorage,
+} from "./normalization/normalize-chat-messages";
 
 function getCorrelationLogFields(traceContext: {
   sessionId?: string;
@@ -2150,7 +2153,7 @@ async function persistNewMessages(
     if (context === "onFinish") {
       // Log size reduction only for onFinish (where we have complete messages)
       const beforeSize = estimateMessagesSize(messagesToSave);
-      messagesToStore = normalizeChatMessages(messagesToSave);
+      messagesToStore = normalizeChatMessagesForStorage(messagesToSave);
       const afterSize = estimateMessagesSize(messagesToStore);
 
       logger.info(
@@ -2166,7 +2169,7 @@ async function persistNewMessages(
       );
     } else {
       // For onError, just strip without detailed logging
-      messagesToStore = normalizeChatMessages(messagesToSave);
+      messagesToStore = normalizeChatMessagesForStorage(messagesToSave);
     }
 
     // Append only new messages with timestamps

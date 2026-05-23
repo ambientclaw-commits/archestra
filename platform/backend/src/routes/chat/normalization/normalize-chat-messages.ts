@@ -9,6 +9,12 @@ export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
+export function normalizeChatMessagesForStorage(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  return stripDataUrlFileParts(normalizeChatMessages(messages));
+}
+
 function dedupeToolPartsFromMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message) => {
     if (!message.parts || !Array.isArray(message.parts)) {
@@ -107,3 +113,33 @@ function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {
 function getToolPartState(part: ChatMessagePart) {
   return typeof part.state === "string" ? part.state : "unknown";
 }
+
+function stripDataUrlFileParts(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    if (!message.parts?.length) {
+      return message;
+    }
+
+    let changed = false;
+    const parts = message.parts.map((part) => {
+      if (
+        part.type === "file" &&
+        typeof part.url === "string" &&
+        part.url.startsWith("data:")
+      ) {
+        changed = true;
+        return {
+          type: "text",
+          text: FILE_ATTACHMENT_STRIPPED_PLACEHOLDER,
+        };
+      }
+
+      return part;
+    });
+
+    return changed ? { ...message, parts } : message;
+  });
+}
+
+const FILE_ATTACHMENT_STRIPPED_PLACEHOLDER =
+  "[File attachment omitted from stored chat history]";
