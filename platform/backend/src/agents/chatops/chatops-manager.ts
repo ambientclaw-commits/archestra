@@ -715,8 +715,26 @@ export class ChatOpsManager {
         : provider.providerId === "ms-teams"
           ? "MS Teams"
           : provider.providerId;
-    const threadIdForPrefix = message.threadId ?? message.messageId;
-    const systemPrefix = `(${providerLabel} conversation, thread id: ${threadIdForPrefix})`;
+    const threadMessageTs = message.threadId ?? message.messageId;
+    const threadPermalink = provider.getMessagePermalink
+      ? await provider.getMessagePermalink({
+          channelId: message.channelId,
+          messageId: threadMessageTs,
+        })
+      : null;
+    const contextLines = [
+      `Conversation context:`,
+      `- Source: ${providerLabel}`,
+      `- Channel ID: ${message.channelId}`,
+      `- Thread message ts: ${threadMessageTs}`,
+    ];
+    if (message.workspaceId) {
+      contextLines.push(`- Workspace ID: ${message.workspaceId}`);
+    }
+    if (threadPermalink) {
+      contextLines.push(`- Thread permalink: ${threadPermalink}`);
+    }
+    const systemPrefix = contextLines.join("\n");
 
     let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
     if (contextMessages.length > 0) {
