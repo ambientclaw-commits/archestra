@@ -58,6 +58,9 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
+import { initAuditDecisions } from "@/middleware/audit-decisions";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
@@ -88,6 +91,7 @@ import {
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
+  SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
 import {
   UserConfigFieldDefaultSchema,
@@ -777,12 +781,15 @@ const startWebServer = async () => {
    * - /health: Kubernetes liveness probe
    * - /ready: Kubernetes readiness probe (checks database connectivity)
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
+   * - /skills/m/*: public marketplace git endpoint — URL contains raw share token
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
     if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
     if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
       return true;
+    // token is embedded in the URL path; never log it
+    if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     return false;
   };
 
@@ -833,6 +840,13 @@ const startWebServer = async () => {
    * This should be registered before routes to ensure enterprise-only features are checked properly.
    */
   fastify.register(enterpriseLicenseMiddleware);
+
+  // Extend the audit registry and audit decisions with EE entries
+  // (identity providers) if applicable, then register the audit hooks.
+  // Done before routes so the hooks are active for all subsequent requests.
+  await initAuditRegistry();
+  await initAuditDecisions();
+  registerAuditLogHook(fastify);
 
   try {
     // Initialize database connection first

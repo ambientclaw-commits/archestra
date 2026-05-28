@@ -92,6 +92,14 @@ class SkillModel {
     return result ?? null;
   }
 
+  static async findByIds(ids: string[]): Promise<Skill[]> {
+    if (ids.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.skillsTable)
+      .where(inArray(schema.skillsTable.id, ids));
+  }
+
   static async findByName(
     organizationId: string,
     name: string,
@@ -197,6 +205,24 @@ class SkillModel {
       .returning({ id: schema.skillsTable.id });
 
     return rows.length > 0;
+  }
+
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
   }
 }
 
