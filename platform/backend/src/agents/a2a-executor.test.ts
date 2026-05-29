@@ -109,7 +109,7 @@ describe("buildUserContent", () => {
     expect(skippedNote).toBe("");
   });
 
-  test("returns null content with skipped note when attachments contain no images", () => {
+  test("builds content parts for non-image attachments", () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
@@ -125,10 +125,25 @@ describe("buildUserContent", () => {
 
     const { content, skippedNote } = buildUserContent("Hello", attachments);
 
-    expect(content).toBeNull();
-    expect(skippedNote).toContain("2 attachment(s)");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
+    expect(skippedNote).toBe("");
+    expect(content).toHaveLength(3);
+    expect(content?.[0]).toEqual({ type: "text", text: "Hello" });
+    expect(content?.[1]).toMatchObject({
+      type: "file",
+      mediaType: "application/pdf",
+      filename: "doc.pdf",
+    });
+    expect(content?.[2]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "note.txt",
+    });
+    expect((content?.[1] as { data: Buffer }).data.toString("base64")).toBe(
+      "JVBERi0xLjQ=",
+    );
+    expect((content?.[2] as { data: Buffer }).data.toString("base64")).toBe(
+      "SGVsbG8=",
+    );
   });
 
   test("builds content parts with a single image attachment", () => {
@@ -185,7 +200,7 @@ describe("buildUserContent", () => {
     expect(content?.[2]).toHaveProperty("mediaType", "image/jpeg");
   });
 
-  test("filters out non-image attachments from mixed set and appends note", () => {
+  test("passes mixed file attachments through and preserves order", () => {
     const attachments: A2AAttachment[] = [
       {
         contentType: "application/pdf",
@@ -209,17 +224,25 @@ describe("buildUserContent", () => {
       attachments,
     );
 
-    expect(content).toHaveLength(2); // 1 text + 1 file
+    expect(skippedNote).toBe("");
+    expect(content).toHaveLength(4); // 1 text + 3 files
     expect(content?.[0]).toHaveProperty("type", "text");
-    // The text part should include the skipped note
-    expect((content?.[0] as { text: string }).text).toContain("Check this");
-    expect((content?.[0] as { text: string }).text).toContain(
-      "2 attachment(s)",
-    );
-    expect(content?.[1]).toHaveProperty("type", "file");
-    expect(content?.[1]).toHaveProperty("mediaType", "image/png");
-    expect(skippedNote).toContain("doc.pdf");
-    expect(skippedNote).toContain("note.txt");
+    expect((content?.[0] as { text: string }).text).toBe("Check this");
+    expect(content?.[1]).toMatchObject({
+      type: "file",
+      mediaType: "application/pdf",
+      filename: "doc.pdf",
+    });
+    expect(content?.[2]).toMatchObject({
+      type: "file",
+      mediaType: "image/png",
+      filename: "photo.png",
+    });
+    expect(content?.[3]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "note.txt",
+    });
   });
 
   test("handles various image MIME types", () => {
@@ -276,17 +299,17 @@ describe("buildUserContent", () => {
     expect(content?.[1]).toHaveProperty("mediaType", "image/png");
   });
 
-  test("skipped note uses 'unnamed' for attachments without names", () => {
+  test("skipped note uses 'unnamed' for skipped tiny images without names", () => {
     const attachments: A2AAttachment[] = [
       {
-        contentType: "application/pdf",
-        contentBase64: "JVBERi0xLjQ=",
+        contentType: "image/png",
+        contentBase64: "A".repeat(100),
       },
     ];
 
     const { skippedNote } = buildUserContent("Hello", attachments);
 
-    expect(skippedNote).toContain("unnamed (application/pdf)");
+    expect(skippedNote).toContain("unnamed (image/png)");
   });
 
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", () => {

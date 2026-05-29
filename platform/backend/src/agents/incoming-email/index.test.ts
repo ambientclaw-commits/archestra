@@ -240,6 +240,75 @@ describe("processIncomingEmail", () => {
     });
   });
 
+  test("passes PDF email attachments through to A2A execution", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const internalAgent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = internalAgent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: "test-msg-pdf-attachment",
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "What is in this file?",
+      receivedAt: new Date(),
+      attachments: [
+        {
+          id: "attachment-1",
+          name: "sample.pdf",
+          contentType: "application/pdf",
+          size: 12,
+          contentBase64: "JVBERi0xLjQ=",
+          isInline: false,
+        },
+      ],
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId,
+        message: "What is in this file?",
+        attachments: [
+          {
+            contentType: "application/pdf",
+            contentBase64: "JVBERi0xLjQ=",
+            name: "sample.pdf",
+          },
+        ],
+      }),
+    );
+  });
+
   test("uses subject when body is empty", async ({
     makeUser,
     makeOrganization,

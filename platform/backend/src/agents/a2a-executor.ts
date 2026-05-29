@@ -258,7 +258,7 @@ export async function executeA2AMessage(
     // Capture stream-level errors (e.g. API billing errors) via onError so we
     // can surface the real cause instead of a generic NoOutputGeneratedError.
 
-    // Build multimodal user content when image attachments are present
+    // Build multimodal user content when attachments are present.
     const { content: userContent, skippedNote } = buildUserContent(
       message,
       attachments,
@@ -410,12 +410,13 @@ export async function executeA2AMessage(
 
 /**
  * Build AI SDK UserContent from a text message and optional attachments.
- * Returns `content: null` when there are no image attachments (caller should use plain `prompt` instead).
- * Returns `skippedNote` with a human-readable note about non-image attachments that were dropped,
+ * Returns `content: null` when there are no usable attachments (caller should use plain `prompt` instead).
+ * Returns `skippedNote` with a human-readable note about attachments that were dropped,
  * so the caller can append it to the prompt for the LLM to mention.
  *
- * Only image attachments are currently supported as inline content parts.
- * Non-image attachments are noted so the LLM can inform the user.
+ * Email clients often include tiny broken inline image references in replies.
+ * Those are filtered out; regular file attachments, including PDFs, are
+ * passed through as file parts just like chat uploads.
  * @public — exported for testability
  */
 export function buildUserContent(
@@ -424,24 +425,12 @@ export function buildUserContent(
 ): { content: UserContent | null; skippedNote: string } {
   const allAttachments = attachments ?? [];
 
-  // Split into image and non-image attachments
-  const imageAttachments = allAttachments.filter((a) =>
-    a.contentType.startsWith("image/"),
-  );
-  const nonImageAttachments = allAttachments.filter(
-    (a) => !a.contentType.startsWith("image/"),
-  );
-
   // Filter out tiny images (broken inline references from email replies).
   // Estimate actual byte size from base64 length: every 4 base64 chars = 3 bytes.
-  const validImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes >= MIN_IMAGE_ATTACHMENT_SIZE;
-  });
-  const tinyImageAttachments = imageAttachments.filter((a) => {
-    const estimatedBytes = Math.ceil((a.contentBase64.length * 3) / 4);
-    return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
-  });
+  const tinyImageAttachments = allAttachments.filter(isTinyImageAttachment);
+  const includedAttachments = allAttachments.filter(
+    (attachment) => !isTinyImageAttachment(attachment),
+  );
 
   if (tinyImageAttachments.length > 0) {
     logger.debug(
@@ -457,36 +446,23 @@ export function buildUserContent(
     );
   }
 
-  if (nonImageAttachments.length > 0) {
-    logger.debug(
-      {
-        skippedCount: nonImageAttachments.length,
-        skippedTypes: nonImageAttachments.map(
-          (a) => `${a.name ?? "unnamed"} (${a.contentType})`,
-        ),
-      },
-      "Skipping non-image attachments in buildUserContent (only image/* is currently supported)",
-    );
-  }
-
-  // Build a note about all skipped attachments so the LLM can mention them
-  const allSkipped = [...nonImageAttachments, ...tinyImageAttachments];
   const skippedNote =
-    allSkipped.length > 0
-      ? `\n\n[Note: This message also included ${allSkipped.length} attachment(s) that could not be processed: ${allSkipped.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
+    tinyImageAttachments.length > 0
+      ? `\n\n[Note: This message also included ${tinyImageAttachments.length} attachment(s) that could not be processed: ${tinyImageAttachments.map((a) => `${a.name ?? "unnamed"} (${a.contentType})`).join(", ")}]`
       : "";
 
-  if (validImageAttachments.length === 0) {
+  if (includedAttachments.length === 0) {
     return { content: null, skippedNote };
   }
 
   return {
     content: [
       { type: "text" as const, text: message + skippedNote },
-      ...validImageAttachments.map((a) => ({
+      ...includedAttachments.map((a) => ({
         type: "file" as const,
         data: Buffer.from(a.contentBase64, "base64"),
         mediaType: a.contentType,
+        filename: a.name,
       })),
     ],
     skippedNote,
@@ -496,6 +472,14 @@ export function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+function isTinyImageAttachment(attachment: A2AAttachment): boolean {
+  if (!attachment.contentType.startsWith("image/")) {
+    return false;
+  }
+  const estimatedBytes = Math.ceil((attachment.contentBase64.length * 3) / 4);
+  return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
+}
 
 /**
  * Clean up browser tab state after A2A execution.
