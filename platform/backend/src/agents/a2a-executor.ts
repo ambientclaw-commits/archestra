@@ -196,6 +196,10 @@ export async function executeA2AMessage(
   if (renderedPrompt) {
     systemPrompt = renderedPrompt;
   }
+  systemPrompt = appendSourceSystemPrompt({
+    systemPrompt,
+    source,
+  });
 
   // Track subagent execution so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -216,7 +220,7 @@ export async function executeA2AMessage(
       chatOpsThreadId,
       sessionId,
       delegationChain,
-      conversationId: isolationKey,
+      conversationId: params.conversationId,
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
@@ -479,6 +483,21 @@ function isTinyImageAttachment(attachment: A2AAttachment): boolean {
   }
   const estimatedBytes = Math.ceil((attachment.contentBase64.length * 3) / 4);
   return estimatedBytes < MIN_IMAGE_ATTACHMENT_SIZE;
+}
+
+function appendSourceSystemPrompt(params: {
+  systemPrompt: string | undefined;
+  source: InteractionSource | undefined;
+}): string | undefined {
+  if (params.source !== "email") {
+    return params.systemPrompt;
+  }
+
+  const emailInstructions = `When replying to an email, if the user asks you to create, generate, edit, or return a file, use the available sandbox/artifact tools to create the file and export it with get_skill_sandbox_artifact. Exported artifacts are automatically attached to the email reply. Do not say you cannot send files, and do not reply with scripts or instructions instead of attaching the generated artifact.`;
+
+  return params.systemPrompt
+    ? `${params.systemPrompt}\n\n${emailInstructions}`
+    : emailInstructions;
 }
 
 /**

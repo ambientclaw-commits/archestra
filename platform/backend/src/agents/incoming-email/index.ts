@@ -6,8 +6,10 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
+import MemberModel from "@/models/member";
 import OrganizationModel from "@/models/organization";
 import ProcessedEmailModel from "@/models/processed-email";
+import SkillSandboxArtifactModel from "@/models/skill-sandbox-artifact";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
@@ -15,12 +17,14 @@ import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
   EmailProviderType,
+  EmailResponseAttachment,
   IncomingEmail,
   SubscriptionInfo,
 } from "@/types";
 import {
   DEFAULT_AGENT_EMAIL_NAME,
   MAX_EMAIL_BODY_SIZE,
+  MAX_REPLY_ATTACHMENT_SIZE,
   PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
 import { OutlookEmailProvider } from "./outlook-provider";
@@ -536,12 +540,12 @@ export async function processIncomingEmail(
 
   // Determine userId for the request (used for 'private' mode).
   let userId: string = "system";
+  const senderUser = await UserModel.findByEmail(senderEmail);
 
   switch (securityMode) {
     case "private": {
       // Private mode: Sender must be an Archestra user with access to the agent
-      const user = await UserModel.findByEmail(senderEmail);
-      if (!user) {
+      if (!senderUser) {
         logger.warn(
           {
             messageId: email.messageId,
@@ -557,7 +561,7 @@ export async function processIncomingEmail(
 
       // Check if user is an agent admin (can access all agents)
       const isAgentAdmin = await userHasPermission(
-        user.id,
+        senderUser.id,
         agent.organizationId,
         "agent",
         "admin",
@@ -565,7 +569,7 @@ export async function processIncomingEmail(
 
       // Check if user has access to the agent via team membership or admin permission
       const hasAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
+        senderUser.id,
         agentId,
         isAgentAdmin,
       );
@@ -575,7 +579,7 @@ export async function processIncomingEmail(
           {
             messageId: email.messageId,
             agentId,
-            userId: user.id,
+            userId: senderUser.id,
             senderEmail,
             isAgentAdmin,
           },
@@ -587,13 +591,13 @@ export async function processIncomingEmail(
       }
 
       // Use the verified user ID for execution context
-      userId = user.id;
+      userId = senderUser.id;
 
       logger.info(
         {
           messageId: email.messageId,
           agentId,
-          userId: user.id,
+          userId: senderUser.id,
           senderEmail,
           isAgentAdmin,
         },
@@ -665,6 +669,26 @@ export async function processIncomingEmail(
       );
       throw new Error(
         `Unknown security mode: ${securityMode}. Email rejected for security.`,
+      );
+    }
+  }
+
+  if (userId === "system" && senderUser) {
+    const senderMembership = await MemberModel.getByUserId(
+      senderUser.id,
+      agent.organizationId,
+    );
+    if (senderMembership) {
+      userId = senderUser.id;
+      logger.info(
+        {
+          messageId: email.messageId,
+          agentId,
+          userId,
+          senderEmail,
+          securityMode,
+        },
+        "[IncomingEmail] Using registered sender user for email execution context",
       );
     }
   }
@@ -823,6 +847,8 @@ ${formattedHistory}
       messageId: result.messageId,
       responseLength: result.text.length,
       finishReason: result.finishReason,
+      responseAttachmentCount: extractArtifactRefs(result.responseUiMessage)
+        .length,
     },
     "[IncomingEmail] Agent execution completed",
   );
@@ -832,11 +858,17 @@ ${formattedHistory}
     try {
       // Use the agent name for the email reply
       const replyAgentName = agent.name || DEFAULT_AGENT_EMAIL_NAME;
+      const responseAttachments = await collectEmailResponseAttachments({
+        responseUiMessage: result.responseUiMessage,
+        organizationId: organization,
+      });
 
       const replyId = await provider.sendReply({
         originalEmail: email,
         body: result.text,
         agentName: replyAgentName,
+        attachments:
+          responseAttachments.length > 0 ? responseAttachments : undefined,
       });
 
       logger.info(
@@ -844,6 +876,7 @@ ${formattedHistory}
           agentId,
           originalMessageId: email.messageId,
           replyId,
+          responseAttachmentCount: responseAttachments.length,
         },
         "[IncomingEmail] Sent email reply with agent response",
       );
@@ -864,4 +897,100 @@ ${formattedHistory}
 
   // No reply sent - return undefined explicitly for clarity
   return undefined;
+}
+
+// === internal helpers ===
+
+interface ArtifactRef {
+  artifactId: string;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+async function collectEmailResponseAttachments(params: {
+  responseUiMessage: { parts?: unknown[] };
+  organizationId: string;
+}): Promise<EmailResponseAttachment[]> {
+  const artifactRefs = extractArtifactRefs(params.responseUiMessage);
+  if (artifactRefs.length === 0) return [];
+
+  const attachments: EmailResponseAttachment[] = [];
+  const seenArtifactIds = new Set<string>();
+  for (const ref of artifactRefs) {
+    if (seenArtifactIds.has(ref.artifactId)) continue;
+    seenArtifactIds.add(ref.artifactId);
+
+    if (ref.sizeBytes > MAX_REPLY_ATTACHMENT_SIZE) {
+      logger.warn(
+        {
+          artifactId: ref.artifactId,
+          sizeBytes: ref.sizeBytes,
+          maxSizeBytes: MAX_REPLY_ATTACHMENT_SIZE,
+        },
+        "[IncomingEmail] Skipping generated attachment over Graph simple attachment limit",
+      );
+      continue;
+    }
+
+    const artifact = await SkillSandboxArtifactModel.findById(ref.artifactId);
+    if (!artifact || artifact.organizationId !== params.organizationId) {
+      logger.warn(
+        { artifactId: ref.artifactId },
+        "[IncomingEmail] Skipping generated attachment that is not accessible",
+      );
+      continue;
+    }
+
+    const data = Buffer.isBuffer(artifact.data)
+      ? artifact.data
+      : Buffer.from(artifact.data);
+    attachments.push({
+      artifactId: artifact.id,
+      name: safeAttachmentName(artifact.path || ref.path),
+      contentType: artifact.mimeType || ref.mimeType,
+      size: data.byteLength,
+      contentBase64: data.toString("base64"),
+    });
+  }
+  return attachments;
+}
+
+function extractArtifactRefs(responseUiMessage: {
+  parts?: unknown[];
+}): ArtifactRef[] {
+  const refs: ArtifactRef[] = [];
+  for (const part of responseUiMessage.parts ?? []) {
+    const output = getObjectValue(part, "output");
+    const structuredContent = getObjectValue(output, "structuredContent");
+    const candidates = [output, structuredContent];
+    for (const candidate of candidates) {
+      if (isArtifactRef(candidate)) {
+        refs.push(candidate);
+      }
+    }
+  }
+  return refs;
+}
+
+function isArtifactRef(value: unknown): value is ArtifactRef {
+  if (!value || typeof value !== "object") return false;
+  const ref = value as Record<string, unknown>;
+  return (
+    typeof ref.artifactId === "string" &&
+    typeof ref.path === "string" &&
+    typeof ref.mimeType === "string" &&
+    typeof ref.sizeBytes === "number"
+  );
+}
+
+function getObjectValue(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
+function safeAttachmentName(path: string): string {
+  const basename = path.split(/[\\/]/).pop() || "artifact";
+  const cleaned = basename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return cleaned || "artifact";
 }

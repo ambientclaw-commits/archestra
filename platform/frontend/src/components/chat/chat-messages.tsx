@@ -124,6 +124,10 @@ import {
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
 import {
+  isArtifactRef,
+  SandboxArtifactPreview,
+} from "./sandbox-artifact-preview";
+import {
   getSwapAgentBoundaryLabel,
   SwapAgentBoundaryDivider,
 } from "./swap-agent-boundary";
@@ -1668,6 +1672,7 @@ const MessageTool = memo(
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+    const artifact = errorText ? null : extractArtifact(toolResultPart, part);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -1679,7 +1684,7 @@ const MessageTool = memo(
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
-    const shouldDefaultOpen = isApprovalRequested;
+    const shouldDefaultOpen = isApprovalRequested || Boolean(artifact);
 
     // Hooks must be called before any early returns
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
@@ -2018,6 +2023,7 @@ const MessageTool = memo(
                 errorText={errorText}
               />
             )}
+          {artifact ? <SandboxArtifactPreview artifact={artifact} /> : null}
         </ToolContent>
       </Tool>
     );
@@ -2038,6 +2044,18 @@ const MessageTool = memo(
     !!prev.earlyToolUiData?.html === !!next.earlyToolUiData?.html &&
     prev.toolIconMap === next.toolIconMap,
 );
+
+function extractArtifact(
+  toolResultPart: ToolUIPart | DynamicToolUIPart | null,
+  part: ToolUIPart | DynamicToolUIPart,
+) {
+  const resultOutput = toolResultPart?.output ?? part.output;
+  if (!resultOutput || typeof resultOutput !== "object") return null;
+  if (isArtifactRef(resultOutput)) return resultOutput;
+  const inner = (resultOutput as { structuredContent?: unknown })
+    .structuredContent;
+  return isArtifactRef(inner) ? inner : null;
+}
 
 const getHeaderState = ({
   state,

@@ -789,6 +789,116 @@ describe("processIncomingEmail with sendReply option", () => {
     expect(result).toBe("Agent response for reply");
   });
 
+  test("attaches generated sandbox artifacts to email replies", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    const internalAgent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId: internalAgent.id, teamId: team.id });
+
+    const [sandbox] = await db
+      .insert(schema.skillSandboxesTable)
+      .values({
+        organizationId: org.id,
+        userId: user.id,
+        agentId: internalAgent.id,
+        defaultCwd: "/skills/reporting",
+      })
+      .returning();
+    const artifactBytes = Buffer.from("generated report");
+    const [artifact] = await db
+      .insert(schema.skillSandboxArtifactsTable)
+      .values({
+        sandboxId: sandbox.id,
+        organizationId: org.id,
+        path: "/skills/reporting/out/report.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: artifactBytes.byteLength,
+        data: artifactBytes,
+      })
+      .returning();
+
+    vi.mocked(executeA2AMessage).mockResolvedValueOnce({
+      messageId: "msg-with-artifact",
+      text: "Attached the generated report.",
+      finishReason: "end_turn",
+      responseUiMessage: {
+        id: "msg-with-artifact",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Attached the generated report." },
+          {
+            type: "tool-get_skill_sandbox_artifact",
+            state: "output-available",
+            output: {
+              structuredContent: {
+                artifactId: artifact.id,
+                sandboxId: sandbox.id,
+                path: "/skills/reporting/out/report.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: artifactBytes.byteLength,
+                downloadUrl: `/api/skill-sandbox/artifacts/${artifact.id}`,
+              },
+            },
+          },
+        ],
+      } as never,
+    });
+
+    const mockSendReply = vi.fn().mockResolvedValue("reply-with-artifact");
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => internalAgent.id,
+      sendReply: mockSendReply,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-artifact-reply-${Date.now()}`,
+      toAddress: `agents+agent-${internalAgent.id}@test.com`,
+      fromAddress: "sender@example.com",
+      subject: "Test Subject",
+      body: "Create a report",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider, { sendReply: true });
+
+    expect(mockSendReply).toHaveBeenCalledWith({
+      originalEmail: email,
+      body: "Attached the generated report.",
+      agentName: internalAgent.name,
+      attachments: [
+        {
+          artifactId: artifact.id,
+          name: "report.pdf",
+          contentType: "application/pdf",
+          size: artifactBytes.byteLength,
+          contentBase64: artifactBytes.toString("base64"),
+        },
+      ],
+    });
+  });
+
   test("returns agent response text when sendReply succeeds", async ({
     makeUser,
     makeOrganization,
@@ -1628,6 +1738,60 @@ describe("processIncomingEmail security modes", () => {
 
     expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
       expect.objectContaining({
+        message: "Public mode test",
+      }),
+    );
+  });
+
+  test("public mode: uses registered sender as execution user when in the agent organization", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "sender@company.com" });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id);
+    const team = await makeTeam(org.id, user.id);
+
+    const agent = await createTestInternalAgent(org.id, {
+      incomingEmailEnabled: true,
+      incomingEmailSecurityMode: "public",
+    });
+    const agentId = agent.id;
+
+    await db
+      .insert(schema.agentTeamsTable)
+      .values({ agentId, teamId: team.id });
+
+    const mockProvider = {
+      providerId: "outlook",
+      displayName: "Outlook",
+      isConfigured: () => true,
+      initialize: vi.fn(),
+      generateEmailAddress: vi.fn(),
+      getEmailDomain: () => "test.com",
+      parseWebhookNotification: vi.fn(),
+      validateWebhookRequest: vi.fn(),
+      handleValidationChallenge: vi.fn(),
+      cleanup: vi.fn(),
+      extractPromptIdFromEmail: () => agentId,
+    } as unknown as OutlookEmailProvider;
+
+    const email: IncomingEmail = {
+      messageId: `test-public-registered-sender-${Date.now()}`,
+      toAddress: `agents+agent-${agentId}@test.com`,
+      fromAddress: "sender@company.com",
+      subject: "Public Test",
+      body: "Public mode test",
+      receivedAt: new Date(),
+    };
+
+    await processIncomingEmail(email, mockProvider);
+
+    expect(vi.mocked(executeA2AMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user.id,
         message: "Public mode test",
       }),
     );

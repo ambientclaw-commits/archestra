@@ -3,7 +3,7 @@ title: Incoming Email
 category: Agents
 order: 6
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-03-27
+lastUpdated: 2026-05-29
 ---
 
 Incoming Email lets users invoke agents by sending mail to agent-specific aliases. Archestra watches a shared mailbox, extracts the target agent from the alias, and turns the email body into the agent's first message.
@@ -34,11 +34,14 @@ When email replies are enabled, the agent's response is automatically sent back 
 - Maintains the email conversation thread
 - Uses the original message's "Re:" subject prefix
 - Displays the agent's name as the sender
+- Attaches generated sandbox artifacts when the agent exports files with `get_skill_sandbox_artifact`
+
+Generated artifact attachments use Microsoft Graph's simple attachment flow, so each attached artifact must be under 3 MB. Thread-preserving replies with generated attachments require Microsoft Graph `Mail.ReadWrite` application permission because Graph creates a reply draft before attaching files. Without `Mail.ReadWrite`, Archestra falls back to `sendMail` when possible; the response is delivered with attachments, but the mail client may not show it inside the original thread.
 
 ## Prerequisites
 
 - Microsoft 365 mailbox (Exchange Online)
-- Azure AD application with `Mail.Read` application permission
+- Azure AD application with Microsoft Graph application permissions
 - Publicly accessible webhook URL
 
 ## Azure AD Application Setup
@@ -47,8 +50,11 @@ When email replies are enabled, the agent's response is automatically sent back 
 2. Add the following **application** permissions (not delegated) under Microsoft Graph:
    - `Mail.Read` - Required for receiving emails
    - `Mail.Send` - Required for sending reply emails (optional)
+   - `Mail.ReadWrite` - Required for thread-preserving reply emails with generated artifact attachments
 3. Grant admin consent for the permissions
 4. Create a client secret and note the value
+
+If you use an Exchange Application Access Policy to limit which mailboxes the app can access, include the configured incoming email mailbox. The same mailbox must be allowed for `Mail.Read`, `Mail.Send`, and `Mail.ReadWrite`.
 
 ## Configuration
 

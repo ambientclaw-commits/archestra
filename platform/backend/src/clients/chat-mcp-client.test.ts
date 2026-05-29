@@ -2,6 +2,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   getArchestraToolFullName,
+  TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -255,6 +256,54 @@ describe("normalizeJsonSchema", () => {
     const original = JSON.parse(JSON.stringify(schema));
     normalizeJsonSchema(schema);
     expect(schema).toEqual(original);
+  });
+});
+
+describe("formatArchestraToolResultForChat", () => {
+  test("preserves exported artifact metadata for chat rendering", () => {
+    const result = chatClient.__test.formatArchestraToolResultForChat({
+      toolName: getArchestraToolFullName(
+        TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME,
+      ),
+      response: {
+        content: [
+          {
+            type: "text",
+            text: "Saved out/result.gif as artifact artifact-1.",
+          },
+        ],
+        structuredContent: {
+          artifactId: "artifact-1",
+          sandboxId: "sandbox-1",
+          path: "out/result.gif",
+          mimeType: "image/gif",
+          sizeBytes: 123,
+          downloadUrl: "/api/skill-sandbox/artifacts/artifact-1",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      artifactId: "artifact-1",
+      sandboxId: "sandbox-1",
+      path: "out/result.gif",
+      mimeType: "image/gif",
+      sizeBytes: 123,
+      downloadUrl: "/api/skill-sandbox/artifacts/artifact-1",
+      text: "Saved out/result.gif as artifact artifact-1.",
+    });
+  });
+
+  test("keeps ordinary built-in tool results as text", () => {
+    const result = chatClient.__test.formatArchestraToolResultForChat({
+      toolName: getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
+      response: {
+        content: [{ type: "text", text: "Admin" }],
+        structuredContent: { userId: "user-1" },
+      },
+    });
+
+    expect(result).toBe("Admin");
   });
 });
 

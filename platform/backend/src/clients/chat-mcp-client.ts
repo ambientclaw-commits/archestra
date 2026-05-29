@@ -12,11 +12,13 @@ import type {
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  getArchestraToolShortName,
   isAgentTool,
   isBrowserMcpTool,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   parseFullToolName,
   TimeInMs,
+  TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
@@ -211,6 +213,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   normalizeJsonSchema,
+  formatArchestraToolResultForChat,
   executeMcpTool,
   filterToolsByEnabledIds,
   pingClientWithTimeout,
@@ -1006,14 +1009,10 @@ export async function getChatMcpTools({
                       isError: archestraResponse.isError ?? false,
                     });
 
-                    // Return errors as tool-result text so the LLM can read
-                    // and recover, instead of throwing (which surfaces as a
-                    // fatal chat error). Matches executeMcpTool behavior.
-                    return archestraResponse.content
-                      .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
-                      )
-                      .join("\n");
+                    return formatArchestraToolResultForChat({
+                      toolName: mcpTool.name,
+                      response: archestraResponse,
+                    });
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -1885,6 +1884,36 @@ function throwIfAborted(abortSignal?: AbortSignal): void {
   const abortError = new Error("Chat execution aborted");
   abortError.name = "AbortError";
   throw abortError;
+}
+
+function formatArchestraToolResultForChat({
+  toolName,
+  response,
+}: {
+  toolName: string;
+  response: {
+    content: ContentBlock[];
+    structuredContent?: Record<string, unknown>;
+  };
+}) {
+  const shortName = getArchestraToolShortName(toolName);
+  if (
+    shortName === TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME &&
+    response.structuredContent
+  ) {
+    return {
+      ...response.structuredContent,
+      text: textContentForToolResult(response.content),
+    };
+  }
+
+  return textContentForToolResult(response.content);
+}
+
+function textContentForToolResult(content: ContentBlock[]): string {
+  return content
+    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
+    .join("\n");
 }
 
 function isAbortLikeError(error: unknown): boolean {

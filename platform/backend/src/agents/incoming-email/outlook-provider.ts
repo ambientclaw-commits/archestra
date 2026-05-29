@@ -644,7 +644,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
    * - Threading is preserved via the Graph API's reply mechanism
    */
   async sendReply(options: EmailReplyOptions): Promise<string> {
-    const { originalEmail, body, htmlBody, agentName } = options;
+    const { originalEmail, body, htmlBody, agentName, attachments } = options;
     const client = this.getGraphClient();
     const displayName = agentName || DEFAULT_AGENT_EMAIL_NAME;
 
@@ -668,6 +668,17 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
     // Use the agent's email address (the toAddress from the original email)
     const agentEmailAddress = originalEmail.toAddress;
+
+    if (attachments && attachments.length > 0) {
+      return this.sendReplyWithAttachments({
+        client,
+        originalEmail,
+        replyBody,
+        displayName,
+        agentEmailAddress,
+        attachments,
+      });
+    }
 
     // Try to send with 'from' set to agent's email address
     // Note: This will likely fail for plus-addressed aliases due to Graph API limitations
@@ -774,6 +785,210 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
 
       return replyTrackingId;
     }
+  }
+
+  private async sendReplyWithAttachments(params: {
+    client: Client;
+    originalEmail: IncomingEmail;
+    replyBody: { contentType: "Text" | "HTML"; content: string };
+    displayName: string;
+    agentEmailAddress: string;
+    attachments: NonNullable<EmailReplyOptions["attachments"]>;
+  }): Promise<string> {
+    const {
+      client,
+      originalEmail,
+      replyBody,
+      displayName,
+      agentEmailAddress,
+      attachments,
+    } = params;
+
+    logger.info(
+      {
+        originalMessageId: originalEmail.messageId,
+        attachmentCount: attachments.length,
+      },
+      "[OutlookEmailProvider] Sending reply with attachments",
+    );
+
+    try {
+      return await this.sendReplyDraftWithAttachments({
+        client,
+        originalEmail,
+        replyBody,
+        displayName,
+        agentEmailAddress,
+        attachments,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (!isGraphAccessDeniedError(errorMessage)) {
+        throw error;
+      }
+
+      logger.warn(
+        {
+          originalMessageId: originalEmail.messageId,
+          attachmentCount: attachments.length,
+          error: errorMessage,
+        },
+        "[OutlookEmailProvider] Reply draft with attachments was denied; falling back to sendMail",
+      );
+
+      return await this.sendMailWithAttachmentsFallback({
+        client,
+        originalEmail,
+        replyBody,
+        displayName,
+        agentEmailAddress,
+        attachments,
+      });
+    }
+  }
+
+  private async sendReplyDraftWithAttachments(params: {
+    client: Client;
+    originalEmail: IncomingEmail;
+    replyBody: { contentType: "Text" | "HTML"; content: string };
+    displayName: string;
+    agentEmailAddress: string;
+    attachments: NonNullable<EmailReplyOptions["attachments"]>;
+  }): Promise<string> {
+    const {
+      client,
+      originalEmail,
+      replyBody,
+      displayName,
+      agentEmailAddress,
+      attachments,
+    } = params;
+
+    const draft = await client
+      .api(
+        `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}/createReply`,
+      )
+      .post({
+        message: {
+          replyTo: [
+            {
+              emailAddress: {
+                address: agentEmailAddress,
+                name: displayName,
+              },
+            },
+          ],
+          body: replyBody,
+        },
+      });
+
+    const draftId =
+      draft && typeof draft === "object" && "id" in draft
+        ? String(draft.id)
+        : "";
+    if (!draftId) {
+      throw new Error("Microsoft Graph did not return a reply draft ID");
+    }
+
+    for (const attachment of attachments) {
+      await client
+        .api(
+          `/users/${this.config.mailboxAddress}/messages/${draftId}/attachments`,
+        )
+        .post({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: attachment.name,
+          contentType: attachment.contentType,
+          contentBytes: attachment.contentBase64,
+        });
+    }
+
+    await client
+      .api(`/users/${this.config.mailboxAddress}/messages/${draftId}/send`)
+      .post({});
+
+    const replyTrackingId = `reply-${
+      originalEmail.messageId
+    }-${crypto.randomUUID()}`;
+
+    logger.info(
+      {
+        originalMessageId: originalEmail.messageId,
+        replyTrackingId,
+        attachmentCount: attachments.length,
+        replyTo: agentEmailAddress,
+      },
+      "[OutlookEmailProvider] Reply with attachments sent",
+    );
+
+    return replyTrackingId;
+  }
+
+  private async sendMailWithAttachmentsFallback(params: {
+    client: Client;
+    originalEmail: IncomingEmail;
+    replyBody: { contentType: "Text" | "HTML"; content: string };
+    displayName: string;
+    agentEmailAddress: string;
+    attachments: NonNullable<EmailReplyOptions["attachments"]>;
+  }): Promise<string> {
+    const {
+      client,
+      originalEmail,
+      replyBody,
+      displayName,
+      agentEmailAddress,
+      attachments,
+    } = params;
+
+    await client.api(`/users/${this.config.mailboxAddress}/sendMail`).post({
+      message: {
+        subject: originalEmail.subject.startsWith("Re:")
+          ? originalEmail.subject
+          : `Re: ${originalEmail.subject}`,
+        toRecipients: [
+          {
+            emailAddress: {
+              address: originalEmail.fromAddress,
+            },
+          },
+        ],
+        replyTo: [
+          {
+            emailAddress: {
+              address: agentEmailAddress,
+              name: displayName,
+            },
+          },
+        ],
+        body: replyBody,
+        attachments: attachments.map((attachment) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: attachment.name,
+          contentType: attachment.contentType,
+          contentBytes: attachment.contentBase64,
+        })),
+      },
+      saveToSentItems: true,
+    });
+
+    const replyTrackingId = `send-mail-${
+      originalEmail.messageId
+    }-${crypto.randomUUID()}`;
+
+    logger.info(
+      {
+        originalMessageId: originalEmail.messageId,
+        replyTrackingId,
+        attachmentCount: attachments.length,
+        recipient: originalEmail.fromAddress,
+        replyTo: agentEmailAddress,
+      },
+      "[OutlookEmailProvider] Attachment reply sent with sendMail fallback",
+    );
+
+    return replyTrackingId;
   }
 
   /**
@@ -1068,4 +1283,8 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     this.graphClient = null;
     this.subscriptionId = null;
   }
+}
+
+function isGraphAccessDeniedError(message: string): boolean {
+  return message.toLowerCase().includes("access is denied");
 }

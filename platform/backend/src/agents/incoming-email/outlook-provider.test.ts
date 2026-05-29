@@ -344,6 +344,157 @@ describe("OutlookEmailProvider", () => {
       expect(replyId).toContain("reply-original-msg-456-");
     });
 
+    test("sends generated attachments with a reply draft", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post
+        .mockResolvedValueOnce({ id: "draft-reply-123" })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-attachments",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      const replyId = await provider.sendReply({
+        originalEmail,
+        body: "Attached the generated report.",
+        agentName: "Attachment Agent",
+        attachments: [
+          {
+            name: "report.pdf",
+            contentType: "application/pdf",
+            size: 11,
+            contentBase64: Buffer.from("hello world").toString("base64"),
+            artifactId: "artifact-1",
+          },
+        ],
+      });
+
+      expect(mockGraphClient.api).toHaveBeenNthCalledWith(
+        1,
+        "/users/agents@example.com/messages/original-msg-attachments/createReply",
+      );
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(1, {
+        message: {
+          replyTo: [
+            {
+              emailAddress: {
+                address: "agents+agent-abc123@example.com",
+                name: "Attachment Agent",
+              },
+            },
+          ],
+          body: {
+            contentType: "Text",
+            content: "Attached the generated report.",
+          },
+        },
+      });
+      expect(mockGraphClient.api).toHaveBeenNthCalledWith(
+        2,
+        "/users/agents@example.com/messages/draft-reply-123/attachments",
+      );
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(2, {
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: "report.pdf",
+        contentType: "application/pdf",
+        contentBytes: Buffer.from("hello world").toString("base64"),
+      });
+      expect(mockGraphClient.api).toHaveBeenNthCalledWith(
+        3,
+        "/users/agents@example.com/messages/draft-reply-123/send",
+      );
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(3, {});
+      expect(replyId).toContain("reply-original-msg-attachments-");
+    });
+
+    test("falls back to sendMail when reply draft attachments are denied", async () => {
+      const mockGraphClient = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - accessing private property for testing
+      provider.graphClient = mockGraphClient;
+
+      mockGraphClient.post
+        .mockRejectedValueOnce(new Error("Access is denied."))
+        .mockResolvedValueOnce({});
+
+      const originalEmail: IncomingEmail = {
+        messageId: "original-msg-attachments-denied",
+        toAddress: "agents+agent-abc123@example.com",
+        fromAddress: "sender@example.com",
+        subject: "Test Subject",
+        body: "Original message",
+        receivedAt: new Date(),
+      };
+
+      const replyId = await provider.sendReply({
+        originalEmail,
+        body: "Attached the generated image.",
+        agentName: "Attachment Agent",
+        attachments: [
+          {
+            name: "flag.gif",
+            contentType: "image/gif",
+            size: 11,
+            contentBase64: Buffer.from("hello world").toString("base64"),
+            artifactId: "artifact-1",
+          },
+        ],
+      });
+
+      expect(mockGraphClient.api).toHaveBeenNthCalledWith(
+        1,
+        "/users/agents@example.com/messages/original-msg-attachments-denied/createReply",
+      );
+      expect(mockGraphClient.api).toHaveBeenNthCalledWith(
+        2,
+        "/users/agents@example.com/sendMail",
+      );
+      expect(mockGraphClient.post).toHaveBeenNthCalledWith(2, {
+        message: {
+          subject: "Re: Test Subject",
+          toRecipients: [
+            {
+              emailAddress: {
+                address: "sender@example.com",
+              },
+            },
+          ],
+          replyTo: [
+            {
+              emailAddress: {
+                address: "agents+agent-abc123@example.com",
+                name: "Attachment Agent",
+              },
+            },
+          ],
+          body: {
+            contentType: "Text",
+            content: "Attached the generated image.",
+          },
+          attachments: [
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              name: "flag.gif",
+              contentType: "image/gif",
+              contentBytes: Buffer.from("hello world").toString("base64"),
+            },
+          ],
+        },
+        saveToSentItems: true,
+      });
+      expect(replyId).toContain("send-mail-original-msg-attachments-denied-");
+    });
+
     test("falls back to replyTo when Send As permission fails", async () => {
       const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);

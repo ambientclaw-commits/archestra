@@ -473,4 +473,141 @@ describe("executeA2AMessage model selection", () => {
       parts: [{ type: "text", text: "Delegated response" }],
     });
   });
+
+  test("adds email artifact instructions to the model system prompt", async () => {
+    vi.clearAllMocks();
+
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-email",
+      name: "Email Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-email",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        };
+
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      text: Promise.resolve("Done"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+
+    await executeA2AMessage({
+      agentId: "agent-email",
+      message: "Make a GIF and email it back",
+      organizationId: "org-1",
+      userId: "user-1",
+      source: "email",
+    });
+
+    expect(mockStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining("get_skill_sandbox_artifact"),
+      }),
+    );
+    expect(mockStreamText.mock.calls[0][0].system).toContain(
+      "Exported artifacts are automatically attached to the email reply",
+    );
+  });
+
+  test("does not pass a synthetic conversation id to tools for direct email execution", async () => {
+    vi.clearAllMocks();
+
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-email",
+      name: "Email Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-email",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        };
+
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      text: Promise.resolve("Done"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+
+    await executeA2AMessage({
+      agentId: "agent-email",
+      message: "Make a GIF and email it back",
+      organizationId: "org-1",
+      userId: "user-1",
+      source: "email",
+    });
+
+    expect(mockGetChatMcpTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: undefined,
+      }),
+    );
+  });
 });

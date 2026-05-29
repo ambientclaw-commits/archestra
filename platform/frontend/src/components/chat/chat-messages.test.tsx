@@ -584,6 +584,45 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Sensitive context below")).toBeInTheDocument();
   });
 
+  it("renders exported sandbox image artifacts from tool output", () => {
+    const messages = [
+      {
+        id: "assistant-artifact",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__get_skill_sandbox_artifact",
+            toolCallId: "call-artifact",
+            state: "output-available",
+            input: { sandboxId: "sandbox-1", path: "out/flag.gif" },
+            output: {
+              artifactId: "artifact-1",
+              sandboxId: "sandbox-1",
+              path: "/skills/example/out/flag.gif",
+              mimeType: "image/gif",
+              sizeBytes: 512,
+              downloadUrl: "/api/skill-sandbox/artifacts/artifact-1",
+            },
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const image = screen.getByAltText("flag.gif");
+    expect(image).toHaveAttribute(
+      "src",
+      "/api/skill-sandbox/artifacts/artifact-1",
+    );
+  });
+
   it("renders the unsafe-context divider immediately after the unsafe tool result within the same message", () => {
     const messages = [
       {

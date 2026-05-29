@@ -3,7 +3,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Tool,
   ToolContent,
@@ -124,8 +124,27 @@ export function CompactToolGroup({
     reason?: string;
   }) => void;
 }) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const artifactToolKey = useMemo(
+    () =>
+      tools.find((tool) => extractArtifact(tool.toolResultPart, tool.part))
+        ?.key ?? null,
+    [tools],
+  );
+  const [expandedKey, setExpandedKey] = useState<string | null>(
+    () => artifactToolKey,
+  );
+  const autoExpandedArtifactKeyRef = useRef<string | null>(artifactToolKey);
   const { isToolName } = useArchestraMcpIdentity();
+
+  useEffect(() => {
+    if (
+      artifactToolKey &&
+      autoExpandedArtifactKeyRef.current !== artifactToolKey
+    ) {
+      setExpandedKey(artifactToolKey);
+      autoExpandedArtifactKeyRef.current = artifactToolKey;
+    }
+  }, [artifactToolKey]);
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;

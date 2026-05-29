@@ -56,6 +56,14 @@ export const MAX_TOTAL_ATTACHMENTS_SIZE = 25 * 1024 * 1024; // 25MB
 export const MAX_ATTACHMENTS_PER_EMAIL = 20;
 
 /**
+ * Maximum size for generated attachments sent on email replies.
+ * Microsoft Graph's simple "add attachment" endpoint accepts files under 3MB.
+ * Larger files need upload sessions, which are intentionally out of scope for
+ * the first artifact-reply path.
+ */
+export const MAX_REPLY_ATTACHMENT_SIZE = 3 * 1024 * 1024 - 1;
+
+/**
  * Minimum size for image attachments in bytes (2KB)
  * Filters out broken inline image references that email clients include when
  * forwarding/replying (e.g., Outlook includes tiny ~988 byte broken references
