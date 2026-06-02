@@ -11,8 +11,6 @@ import {
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
-  TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   type TokenUsage,
@@ -649,12 +647,6 @@ function ChatSessionHook({
         ];
       });
 
-      if (
-        toolShortName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
-      ) {
-        setPendingCustomServerToolCall(toolCall);
-      }
-
       // Detect swap_agent tool and flag for poke on finish.
       // The backend's stopWhen: hasToolCall(...) stops the agentic loop
       // after swap_agent executes, so the old agent won't continue.
@@ -674,14 +666,6 @@ function ChatSessionHook({
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });
-      }
-
-      // Agents created through chat tool calls bypass the normal frontend
-      // create-agent mutations, so the cached useInternalAgents() list can stay
-      // stale unless we invalidate it here. Without this, the prompt input's
-      // agent selector may not reflect a newly created/swapped-to agent yet.
-      if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
-        queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
 
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact

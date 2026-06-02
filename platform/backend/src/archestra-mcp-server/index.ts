@@ -9,7 +9,7 @@ import {
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
 // Import all groups
-import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
+import { toolEntries as apiToolEntries, tools as apiTools } from "./api";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import {
@@ -30,23 +30,6 @@ import {
   toolEntries as knowledgeManagementToolEntries,
   tools as knowledgeManagementTools,
 } from "./knowledge-management";
-import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
-import {
-  toolEntries as llmProxyToolEntries,
-  tools as llmProxyTools,
-} from "./llm-proxies";
-import {
-  toolEntries as mcpGatewayToolEntries,
-  tools as mcpGatewayTools,
-} from "./mcp-gateways";
-import {
-  toolEntries as mcpServerToolEntries,
-  tools as mcpServerTools,
-} from "./mcp-servers";
-import {
-  toolEntries as policyToolEntries,
-  tools as policyTools,
-} from "./policies";
 import { checkToolPermission } from "./rbac";
 import {
   toolEntries as runToolEntries,
@@ -61,10 +44,6 @@ import {
   tools as skillSandboxTools,
 } from "./skill-sandbox";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
-import {
-  toolEntries as toolAssignmentToolEntries,
-  tools as toolAssignmentTools,
-} from "./tool-assignment";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -76,13 +55,7 @@ const toolEntries: Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
 > = {
   ...identityToolEntries,
-  ...agentToolEntries,
-  ...llmProxyToolEntries,
-  ...mcpGatewayToolEntries,
-  ...mcpServerToolEntries,
-  ...limitToolEntries,
-  ...policyToolEntries,
-  ...toolAssignmentToolEntries,
+  ...apiToolEntries,
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
   ...searchToolEntries,
@@ -95,13 +68,7 @@ const toolEntries: Partial<
 export function getArchestraMcpTools() {
   const tools = [
     ...identityTools,
-    ...agentTools,
-    ...llmProxyTools,
-    ...mcpGatewayTools,
-    ...mcpServerTools,
-    ...limitTools,
-    ...policyTools,
-    ...toolAssignmentTools,
+    ...apiTools,
     ...knowledgeManagementTools,
     ...chatTools,
     ...searchToolTools,

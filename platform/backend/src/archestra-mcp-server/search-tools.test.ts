@@ -1,5 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test assertions inspect tool payloads dynamically
-import { TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME } from "@shared";
+import {
+  TOOL_API_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
+} from "@shared";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -140,9 +144,11 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "trusted data policy" matches only policy tools (trusted-data /
+    // "trusted data policy" matches the policy tools (trusted-data /
     // tool-invocation / autonomy), all of which require permissions this
-    // agent:read role lacks, so RBAC filters them all out before ranking.
+    // agent:read role lacks, so RBAC filters them out before ranking. The
+    // always-available archestra__api tool may still match (it can drive any
+    // route), so it is the only result the role is allowed to see.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
       { query: "trusted data policy", limit: 10 },
@@ -150,10 +156,14 @@ describe("search_tools", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(result.structuredContent).toEqual({
-      total: 0,
-      tools: [],
-    });
+    const structured = result.structuredContent as {
+      total: number;
+      tools: Array<{ toolName: string }>;
+    };
+    const restrictedTools = structured.tools.filter(
+      (tool) => tool.toolName !== TOOL_API_FULL_NAME,
+    );
+    expect(restrictedTools).toEqual([]);
   });
 
   test("returns an error without agent context", async () => {

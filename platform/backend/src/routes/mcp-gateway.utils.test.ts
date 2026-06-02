@@ -1485,13 +1485,13 @@ describe("createAgentServer tools/list", () => {
     const response = await callToolHandler({
       method: "tools/call",
       params: {
-        name: "archestra__get_mcp_servers",
+        name: "archestra__get_knowledge_bases",
         arguments: {},
       },
     });
 
     expect(response.isError).not.toBe(true);
-    expect(response.structuredContent?.items).toEqual(expect.any(Array));
+    expect(response.structuredContent).toBeDefined();
     expect(response.content[0]?.text).not.toContain(
       "User context not available",
     );

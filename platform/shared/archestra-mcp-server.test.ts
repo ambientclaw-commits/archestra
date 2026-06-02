@@ -7,25 +7,23 @@ import {
   getArchestraToolPrefix,
   getArchestraToolShortName,
   isArchestraMcpServerTool,
-  TOOL_CREATE_AGENT_FULL_NAME,
+  TOOL_API_FULL_NAME,
 } from "./archestra-mcp-server";
 
 describe("archestra MCP tool names", () => {
   test("contains the shared special tool short names", () => {
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("create_agent");
+    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("api");
     expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("swap_agent");
     expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("artifact_write");
   });
 
   test("builds a fully-qualified Archestra tool name", () => {
-    expect(getArchestraToolFullName("create_agent")).toBe(
-      TOOL_CREATE_AGENT_FULL_NAME,
-    );
+    expect(getArchestraToolFullName("api")).toBe(TOOL_API_FULL_NAME);
   });
 
   test("preserves literal full-name typing", () => {
-    const fullName = getArchestraToolFullName("create_agent");
-    expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
+    const fullName = getArchestraToolFullName("api");
+    expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_API_FULL_NAME>();
   });
 
   test("slugifies branded tool prefixes for non-alphanumeric app names", () => {
@@ -42,11 +40,11 @@ describe("archestra MCP tool names", () => {
       }),
     ).toBe("archestra__");
     expect(
-      getArchestraToolFullName("create_agent", {
+      getArchestraToolFullName("api", {
         appName: "Archestra ❤️",
         fullWhiteLabeling: true,
       }),
-    ).toBe("archestra__create_agent");
+    ).toBe("archestra__api");
   });
 
   test("falls back to the default built-in prefix when branding slugifies to empty", () => {
@@ -57,17 +55,15 @@ describe("archestra MCP tool names", () => {
       }),
     ).toBe("archestra");
     expect(
-      getArchestraToolFullName("create_agent", {
+      getArchestraToolFullName("api", {
         appName: "❤️",
         fullWhiteLabeling: true,
       }),
-    ).toBe("archestra__create_agent");
+    ).toBe("archestra__api");
   });
 
   test("extracts the short name from an Archestra tool", () => {
-    expect(getArchestraToolShortName(TOOL_CREATE_AGENT_FULL_NAME)).toBe(
-      "create_agent",
-    );
+    expect(getArchestraToolShortName(TOOL_API_FULL_NAME)).toBe("api");
   });
 
   test("returns null for unknown or non-Archestra tool names", () => {

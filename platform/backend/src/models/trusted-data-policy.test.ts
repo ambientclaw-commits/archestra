@@ -1,6 +1,6 @@
 import {
   getArchestraToolFullName,
-  TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -169,8 +169,8 @@ describe("TrustedDataPolicyModel", () => {
         appName: "Acme Copilot",
         fullWhiteLabeling: true,
       });
-      const brandedCreateAgent = getArchestraToolFullName(
-        TOOL_CREATE_AGENT_SHORT_NAME,
+      const brandedQueryKnowledge = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
           appName: "Acme Copilot",
           fullWhiteLabeling: true,
@@ -182,7 +182,7 @@ describe("TrustedDataPolicyModel", () => {
         [
           { toolName: brandedWhoami, toolOutput: { user: "test" } },
           { toolName: "regular-tool", toolOutput: { data: "test" } },
-          { toolName: brandedCreateAgent, toolOutput: { id: "123" } },
+          { toolName: brandedQueryKnowledge, toolOutput: { id: "123" } },
         ],
         "restrictive",
         { teamIds: [] },
@@ -1665,10 +1665,10 @@ describe("TrustedDataPolicyModel", () => {
 
     test("trusts Archestra MCP server tools with different tool names", async () => {
       const archestraTools = [
-        "archestra__get_agent",
-        "archestra__create_limit",
-        "archestra__get_mcp_servers",
-        "archestra__bulk_assign_tools_to_agents",
+        "archestra__whoami",
+        "archestra__query_knowledge_sources",
+        "archestra__list_skills",
+        "archestra__create_knowledge_base",
       ];
 
       for (const toolName of archestraTools) {
@@ -1701,7 +1701,7 @@ describe("TrustedDataPolicyModel", () => {
 
       const result = await TrustedDataPolicyModel.evaluate(
         agentId,
-        "archestra__create_agent",
+        "archestra__whoami",
         {
           value: { source: "malicious", data: "would normally be blocked" },
         },
@@ -1718,7 +1718,7 @@ describe("TrustedDataPolicyModel", () => {
     test("trusts Archestra tools regardless of __ in tool name", async () => {
       const result = await TrustedDataPolicyModel.evaluate(
         agentId,
-        "archestra__get_mcp_servers",
+        "archestra__list_skills",
         {
           value: { servers: ["upstash__context7"] },
         },

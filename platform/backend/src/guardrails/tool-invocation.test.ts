@@ -1,7 +1,7 @@
 import {
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
-  TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { AgentTeamModel, OrganizationModel } from "@/models";
@@ -125,8 +125,8 @@ describe("evaluatePolicies", () => {
       appName: "Acme Copilot",
       iconLogo: null,
     });
-    const brandedListAgents = getArchestraToolFullName(
-      TOOL_LIST_AGENTS_SHORT_NAME,
+    const brandedQueryKnowledge = getArchestraToolFullName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
       {
         appName: "Acme Copilot",
         fullWhiteLabeling: true,
@@ -136,7 +136,7 @@ describe("evaluatePolicies", () => {
     const enabledTools = new Set(["some_tool"]);
 
     const result = await evaluatePolicies(
-      [{ toolCallName: brandedListAgents, toolCallArgs: "{}" }],
+      [{ toolCallName: brandedQueryKnowledge, toolCallArgs: "{}" }],
       agent.id,
       { teamIds: [] },
       true,

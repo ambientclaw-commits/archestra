@@ -2,7 +2,12 @@ import * as Sentry from "@sentry/node";
 import { type RouteId, SupportedProviders } from "@shared";
 import { requiredEndpointPermissionsMap } from "@shared/access-control";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { betterAuth, hasPermission } from "@/auth";
+import { betterAuth, hasPermission, userContextHasPermissions } from "@/auth";
+import {
+  LOOPBACK_HEADER,
+  type LoopbackIdentity,
+  loopbackGateway,
+} from "@/auth/loopback";
 import config from "@/config";
 import logger from "@/logging";
 import { ServiceAccountModel, UserModel } from "@/models";
@@ -160,7 +165,24 @@ export class Authnz {
     return false;
   };
 
+  private resolveLoopbackIdentity = (
+    request: FastifyRequest,
+  ): LoopbackIdentity | null => {
+    const header = request.headers[LOOPBACK_HEADER];
+    const nonce = typeof header === "string" ? header : undefined;
+    if (!nonce) {
+      return null;
+    }
+    return loopbackGateway.resolve(nonce);
+  };
+
   private isAuthenticated = async (request: FastifyRequest) => {
+    // In-process loopback requests authenticate via a single-use nonce that
+    // resolves to a known user; no session/token headers are involved.
+    if (this.resolveLoopbackIdentity(request)) {
+      return true;
+    }
+
     const headers = new Headers(request.headers as HeadersInit);
 
     try {
@@ -268,6 +290,17 @@ export class Authnz {
       },
       "[Authnz] Checking required permissions",
     );
+
+    // Loopback principals carry no session/token headers; authorize directly
+    // against the resolved user's permissions (same RBAC a UI click would hit).
+    if (request.authMethod === "loopback" && request.loopbackUserId) {
+      return userContextHasPermissions({
+        userId: request.loopbackUserId,
+        organizationId: request.organizationId,
+        permissions: requiredPermissions,
+      });
+    }
+
     const result = await hasPermission(
       requiredPermissions,
       request.headers,
@@ -279,6 +312,19 @@ export class Authnz {
 
   private populateUserInfo = async (request: FastifyRequest): Promise<void> => {
     try {
+      // Loopback: identity is already resolved server-side from the nonce.
+      const loopbackIdentity = this.resolveLoopbackIdentity(request);
+      if (loopbackIdentity) {
+        const { organizationId: _omit, ...user } = await UserModel.getById(
+          loopbackIdentity.userId,
+        );
+        request.user = user;
+        request.organizationId = loopbackIdentity.organizationId;
+        request.authMethod = "loopback";
+        request.loopbackUserId = loopbackIdentity.userId;
+        return;
+      }
+
       const headers = new Headers(request.headers as HeadersInit);
 
       // Try session-based authentication first

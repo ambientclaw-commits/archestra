@@ -20,64 +20,9 @@ export const TOOL_PERMISSIONS: Record<
   // Identity — available to all
   whoami: null,
 
-  // Agents
-  create_agent: { resource: "agent", action: "create" },
-  get_agent: { resource: "agent", action: "read" },
-  list_agents: { resource: "agent", action: "read" },
-  edit_agent: { resource: "agent", action: "update" },
-
-  // LLM Proxies
-  create_llm_proxy: { resource: "llmProxy", action: "create" },
-  get_llm_proxy: { resource: "llmProxy", action: "read" },
-  edit_llm_proxy: { resource: "llmProxy", action: "update" },
-
-  // MCP Gateways
-  create_mcp_gateway: { resource: "mcpGateway", action: "create" },
-  get_mcp_gateway: { resource: "mcpGateway", action: "read" },
-  edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
-
-  // MCP Servers
-  search_private_mcp_registry: { resource: "mcpRegistry", action: "read" },
-  get_mcp_servers: { resource: "mcpRegistry", action: "read" },
-  get_mcp_server_tools: { resource: "mcpRegistry", action: "read" },
-  edit_mcp_description: { resource: "mcpRegistry", action: "update" },
-  edit_mcp_config: { resource: "mcpRegistry", action: "update" },
-  create_mcp_server: { resource: "mcpRegistry", action: "create" },
-  deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
-  list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
-  get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
-  create_mcp_server_installation_request: {
-    resource: "mcpServerInstallationRequest",
-    action: "create",
-  },
-
-  // Limits
-  create_limit: { resource: "llmLimit", action: "create" },
-  get_limits: { resource: "llmLimit", action: "read" },
-  update_limit: { resource: "llmLimit", action: "update" },
-  delete_limit: { resource: "llmLimit", action: "delete" },
-  get_agent_token_usage: { resource: "llmLimit", action: "read" },
-  get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
-
-  // Policies
-  get_autonomy_policy_operators: { resource: "toolPolicy", action: "read" },
-  get_tool_invocation_policies: { resource: "toolPolicy", action: "read" },
-  create_tool_invocation_policy: { resource: "toolPolicy", action: "create" },
-  get_tool_invocation_policy: { resource: "toolPolicy", action: "read" },
-  update_tool_invocation_policy: { resource: "toolPolicy", action: "update" },
-  delete_tool_invocation_policy: { resource: "toolPolicy", action: "delete" },
-  get_trusted_data_policies: { resource: "toolPolicy", action: "read" },
-  create_trusted_data_policy: { resource: "toolPolicy", action: "create" },
-  get_trusted_data_policy: { resource: "toolPolicy", action: "read" },
-  update_trusted_data_policy: { resource: "toolPolicy", action: "update" },
-  delete_trusted_data_policy: { resource: "toolPolicy", action: "delete" },
-
-  // Tool Assignment
-  bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
-  bulk_assign_tools_to_mcp_gateways: {
-    resource: "mcpGateway",
-    action: "update",
-  },
+  // API — dispatches to REST routes; per-route RBAC is enforced by the loopback
+  // middleware, so this tool itself needs no additional permission gate.
+  api: null,
 
   // Knowledge Management
   query_knowledge_sources: { resource: "knowledgeSource", action: "query" },

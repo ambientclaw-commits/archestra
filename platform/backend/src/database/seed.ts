@@ -13,6 +13,7 @@ import {
   type PredefinedRoleName,
   type SupportedProvider,
   SupportedProviders,
+  TOOL_API_FULL_NAME,
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -30,6 +31,7 @@ import {
   SkillModel,
   TeamModel,
   TeamTokenModel,
+  ToolInvocationPolicyModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -312,7 +314,44 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
+  await seedArchestraApiDefaultPolicy();
   logger.info("Seeded Archestra catalog and tools");
+}
+
+/**
+ * Default tool-invocation policy for `archestra__api`: writes (any non-GET
+ * method) require human approval. Seeded only when the tool has no policies yet,
+ * so later admin edits (relaxations, removals) are preserved across restarts.
+ */
+async function seedArchestraApiDefaultPolicy(): Promise<void> {
+  const [apiTool] = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(eq(schema.toolsTable.name, TOOL_API_FULL_NAME));
+
+  if (!apiTool) {
+    logger.warn(
+      "archestra__api tool row not found; skipping default policy seed",
+    );
+    return;
+  }
+
+  const existing = await db
+    .select({ id: schema.toolInvocationPoliciesTable.id })
+    .from(schema.toolInvocationPoliciesTable)
+    .where(eq(schema.toolInvocationPoliciesTable.toolId, apiTool.id));
+
+  if (existing.length > 0) {
+    return;
+  }
+
+  await ToolInvocationPolicyModel.create({
+    toolId: apiTool.id,
+    conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+    action: "require_approval",
+    reason: "Archestra API writes require human approval by default.",
+  });
+  logger.info("Seeded default archestra__api tool-invocation policy");
 }
 
 /**

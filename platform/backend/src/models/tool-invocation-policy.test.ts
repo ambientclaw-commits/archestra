@@ -1,6 +1,6 @@
 import {
   getArchestraToolFullName,
-  TOOL_GET_AGENT_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@shared";
 import { describe, expect, test } from "@/test";
@@ -94,8 +94,8 @@ describe("ToolInvocationPolicyModel", () => {
         appName: "Acme Copilot",
         fullWhiteLabeling: true,
       });
-      const brandedGetAgent = getArchestraToolFullName(
-        TOOL_GET_AGENT_SHORT_NAME,
+      const brandedQueryKnowledge = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
           appName: "Acme Copilot",
           fullWhiteLabeling: true,
@@ -106,7 +106,7 @@ describe("ToolInvocationPolicyModel", () => {
         agent.id,
         [
           { toolCallName: brandedWhoami, toolInput: {} },
-          { toolCallName: brandedGetAgent, toolInput: { id: "123" } },
+          { toolCallName: brandedQueryKnowledge, toolInput: { id: "123" } },
         ],
         mockContext,
         false, // untrusted context

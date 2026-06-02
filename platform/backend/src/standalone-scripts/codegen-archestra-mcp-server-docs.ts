@@ -20,13 +20,6 @@ type ToolPermissionDisplay = string;
 
 enum ToolGroup {
   Identity = "Identity",
-  Agents = "Agents",
-  LLMProxies = "LLM Proxies",
-  MCPGateways = "MCP Gateways",
-  MCPServers = "MCP Servers",
-  Limits = "Limits",
-  Policies = "Policies",
-  ToolAssignment = "Tool Assignment",
   KnowledgeManagement = "Knowledge Management",
   Chat = "Chat",
   Meta = "Meta",
@@ -37,19 +30,12 @@ enum ToolGroup {
 
 const groupOrder: Record<ToolGroup, number> = {
   [ToolGroup.Identity]: 0,
-  [ToolGroup.Agents]: 1,
-  [ToolGroup.LLMProxies]: 2,
-  [ToolGroup.MCPGateways]: 3,
-  [ToolGroup.MCPServers]: 4,
-  [ToolGroup.Limits]: 5,
-  [ToolGroup.Policies]: 6,
-  [ToolGroup.ToolAssignment]: 7,
-  [ToolGroup.KnowledgeManagement]: 8,
-  [ToolGroup.Chat]: 9,
-  [ToolGroup.Meta]: 10,
-  [ToolGroup.CodeExecution]: 11,
-  [ToolGroup.Skills]: 12,
-  [ToolGroup.SkillSandbox]: 13,
+  [ToolGroup.KnowledgeManagement]: 1,
+  [ToolGroup.Chat]: 2,
+  [ToolGroup.Meta]: 3,
+  [ToolGroup.CodeExecution]: 4,
+  [ToolGroup.Skills]: 5,
+  [ToolGroup.SkillSandbox]: 6,
 };
 
 /**
@@ -59,52 +45,7 @@ const groupOrder: Record<ToolGroup, number> = {
  */
 const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   whoami: ToolGroup.Identity,
-
-  create_agent: ToolGroup.Agents,
-  get_agent: ToolGroup.Agents,
-  list_agents: ToolGroup.Agents,
-  edit_agent: ToolGroup.Agents,
-
-  create_llm_proxy: ToolGroup.LLMProxies,
-  get_llm_proxy: ToolGroup.LLMProxies,
-  edit_llm_proxy: ToolGroup.LLMProxies,
-
-  create_mcp_gateway: ToolGroup.MCPGateways,
-  get_mcp_gateway: ToolGroup.MCPGateways,
-  edit_mcp_gateway: ToolGroup.MCPGateways,
-
-  search_private_mcp_registry: ToolGroup.MCPServers,
-  get_mcp_servers: ToolGroup.MCPServers,
-  get_mcp_server_tools: ToolGroup.MCPServers,
-  edit_mcp_description: ToolGroup.MCPServers,
-  edit_mcp_config: ToolGroup.MCPServers,
-  create_mcp_server: ToolGroup.MCPServers,
-  deploy_mcp_server: ToolGroup.MCPServers,
-  list_mcp_server_deployments: ToolGroup.MCPServers,
-  get_mcp_server_logs: ToolGroup.MCPServers,
-  create_mcp_server_installation_request: ToolGroup.MCPServers,
-
-  create_limit: ToolGroup.Limits,
-  get_limits: ToolGroup.Limits,
-  update_limit: ToolGroup.Limits,
-  delete_limit: ToolGroup.Limits,
-  get_agent_token_usage: ToolGroup.Limits,
-  get_llm_proxy_token_usage: ToolGroup.Limits,
-
-  get_autonomy_policy_operators: ToolGroup.Policies,
-  get_tool_invocation_policies: ToolGroup.Policies,
-  create_tool_invocation_policy: ToolGroup.Policies,
-  get_tool_invocation_policy: ToolGroup.Policies,
-  update_tool_invocation_policy: ToolGroup.Policies,
-  delete_tool_invocation_policy: ToolGroup.Policies,
-  get_trusted_data_policies: ToolGroup.Policies,
-  create_trusted_data_policy: ToolGroup.Policies,
-  get_trusted_data_policy: ToolGroup.Policies,
-  update_trusted_data_policy: ToolGroup.Policies,
-  delete_trusted_data_policy: ToolGroup.Policies,
-
-  bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
-  bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
+  api: ToolGroup.Identity,
 
   query_knowledge_sources: ToolGroup.KnowledgeManagement,
   create_knowledge_base: ToolGroup.KnowledgeManagement,

@@ -7,14 +7,6 @@ import {
 } from "@shared";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
-import {
-  AgentModel,
-  AgentToolModel,
-  InternalMcpCatalogModel,
-  McpServerModel,
-  ToolModel,
-} from "@/models";
-import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import type { ArchestraContext } from "./types";
 
 export function isAbortLikeError(error: unknown): boolean {
@@ -31,23 +23,6 @@ export function isAbortLikeError(error: unknown): boolean {
   return /\baborted?\b/i.test(error.message);
 }
 
-type SubAgentResult = { id: string; status: string };
-export interface ToolAssignmentInput {
-  /** Exact tool ID to assign to the target agent. */
-  toolId: string;
-  /**
-   * Preferred late-bound mode for builder flows.
-   * When true, credentials and execution target are resolved at tool call time.
-   */
-  resolveAtCallTime?: boolean;
-  /** Static assignments pin the tool to one installed MCP server. */
-  mcpServerId?: string | null;
-}
-type ToolAssignmentResult = {
-  toolId: string;
-  status: string;
-  error?: string;
-};
 type ArchestraToolHandler<TSchema extends ZodType = ZodType> = (params: {
   args: z.infer<TSchema>;
   context: ArchestraContext;
@@ -83,119 +58,6 @@ type ArchestraToolDefinitionInput<
 > = Omit<ArchestraToolDefinition<ShortName, TSchema>, "invoke">;
 
 export const EmptyToolArgsSchema = z.strictObject({});
-
-export async function assignToolAssignments(
-  agentId: string,
-  assignments: ToolAssignmentInput[],
-): Promise<ToolAssignmentResult[]> {
-  const results: ToolAssignmentResult[] = [];
-  const preFetchedData = await buildAgentToolAssignmentPrefetch({
-    agentId,
-    assignments,
-  });
-
-  for (const assignment of assignments) {
-    try {
-      const result = await assignToolToAgent({
-        agentId,
-        toolId: assignment.toolId,
-        resolveAtCallTime: assignment.resolveAtCallTime,
-        mcpServerId: assignment.mcpServerId,
-        preFetchedData,
-      });
-
-      if (result === null || result === "updated") {
-        results.push({ toolId: assignment.toolId, status: "success" });
-        continue;
-      }
-
-      if (result === "duplicate") {
-        results.push({ toolId: assignment.toolId, status: "duplicate" });
-        continue;
-      }
-
-      results.push({
-        toolId: assignment.toolId,
-        status: "error",
-        error: result.error.message,
-      });
-    } catch (error) {
-      logger.error(
-        { err: error, toolId: assignment.toolId },
-        "Error assigning tool to agent",
-      );
-      results.push({
-        toolId: assignment.toolId,
-        status: "error",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }
-
-  return results;
-}
-
-export async function assignSubAgentDelegations(
-  agentId: string,
-  subAgentIds: string[],
-): Promise<SubAgentResult[]> {
-  const results: SubAgentResult[] = [];
-  for (const subAgentId of subAgentIds) {
-    try {
-      const targetAgent = await AgentModel.findById(subAgentId);
-      if (!targetAgent) {
-        results.push({ id: subAgentId, status: "not_found" });
-        continue;
-      }
-      if (targetAgent.agentType !== "agent") {
-        results.push({ id: subAgentId, status: "invalid_target" });
-        continue;
-      }
-      if (subAgentId === agentId) {
-        results.push({ id: subAgentId, status: "self_delegation_blocked" });
-        continue;
-      }
-      await AgentToolModel.assignDelegation(agentId, subAgentId);
-      results.push({ id: subAgentId, status: "success" });
-    } catch (error) {
-      logger.error(
-        { err: error, subAgentId },
-        "Error assigning sub-agent delegation",
-      );
-      results.push({ id: subAgentId, status: "error" });
-    }
-  }
-  return results;
-}
-
-export function formatAssignmentSummary(
-  lines: string[],
-  subAgentResults: SubAgentResult[],
-  toolAssignmentResults: ToolAssignmentResult[] = [],
-): void {
-  if (subAgentResults.length > 0) {
-    lines.push(
-      "",
-      "Sub-Agent Delegations:",
-      ...subAgentResults.map((r) => `  - ${r.id}: ${r.status}`),
-    );
-  }
-  if (toolAssignmentResults.length > 0) {
-    lines.push(
-      "",
-      "Tool Assignments:",
-      ...toolAssignmentResults.map(
-        (r) => `  - ${r.toolId}: ${r.status}${r.error ? ` - ${r.error}` : ""}`,
-      ),
-    );
-  }
-}
-
-export function deduplicateLabels(
-  rawLabels: Array<{ key: string; value: string }>,
-): Array<{ key: string; value: string }> {
-  return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
-}
 
 export function successResult(text: string): CallToolResult {
   return {
@@ -391,52 +253,6 @@ export function catchError(error: unknown, action: string): CallToolResult {
 }
 
 // === Internal helpers ===
-
-async function buildAgentToolAssignmentPrefetch(params: {
-  agentId: string;
-  assignments: ToolAssignmentInput[];
-}) {
-  const { agentId, assignments } = params;
-  const uniqueToolIds = [
-    ...new Set(assignments.map((assignment) => assignment.toolId)),
-  ];
-  const tools = await ToolModel.getByIds(uniqueToolIds);
-  const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
-
-  const uniqueCatalogIds = [
-    ...new Set(
-      tools
-        .map((tool) => tool.catalogId)
-        .filter((catalogId): catalogId is string => catalogId != null),
-    ),
-  ];
-  const catalogItemsMap =
-    uniqueCatalogIds.length > 0
-      ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
-      : new Map();
-
-  const uniqueMcpServerIds = [
-    ...new Set(
-      assignments
-        .map((assignment) => assignment.mcpServerId)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  const mcpServersBasicMap = new Map();
-  if (uniqueMcpServerIds.length > 0) {
-    const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
-    for (const server of servers) {
-      mcpServersBasicMap.set(server.id, server);
-    }
-  }
-
-  return {
-    existingAgentIds: new Set([agentId]),
-    toolsMap,
-    catalogItemsMap,
-    mcpServersBasicMap,
-  };
-}
 
 export function formatZodError(error: ZodError): string {
   return error.issues.map(formatZodIssue).join("; ");

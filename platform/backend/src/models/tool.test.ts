@@ -2765,16 +2765,16 @@ describe("ToolModel", () => {
 
   describe("parseArchestraBuiltInName", () => {
     test("parses default built-in tool names", () => {
-      expect(parseArchestraBuiltInName("archestra__create_agent")).toEqual({
+      expect(parseArchestraBuiltInName("archestra__api")).toEqual({
         serverName: "archestra",
-        shortName: "create_agent",
+        shortName: "api",
       });
     });
 
     test("parses white-labeled built-in tool names", () => {
-      expect(parseArchestraBuiltInName("acme_copilot__create_agent")).toEqual({
+      expect(parseArchestraBuiltInName("acme_copilot__api")).toEqual({
         serverName: "acme_copilot",
-        shortName: "create_agent",
+        shortName: "api",
       });
     });
 

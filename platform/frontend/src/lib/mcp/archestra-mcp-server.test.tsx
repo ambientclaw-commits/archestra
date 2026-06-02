@@ -41,13 +41,9 @@ describe("useArchestraMcpIdentity", () => {
     expect(result.current.appName).toBe("Sparky");
     expect(result.current.catalogName).toBe("Archestra");
     expect(result.current.serverName).toBe("archestra");
-    expect(result.current.getToolName("create_agent")).toBe(
-      "archestra__create_agent",
-    );
-    expect(result.current.getToolShortName("archestra__create_agent")).toBe(
-      "create_agent",
-    );
-    expect(result.current.isToolName("archestra__create_agent")).toBe(true);
+    expect(result.current.getToolName("api")).toBe("archestra__api");
+    expect(result.current.getToolShortName("archestra__api")).toBe("api");
+    expect(result.current.isToolName("archestra__api")).toBe(true);
   });
 
   it("returns branded MCP identity when full white-labeling is enabled", () => {
@@ -58,14 +54,10 @@ describe("useArchestraMcpIdentity", () => {
 
     expect(result.current.catalogName).toBe("Sparky");
     expect(result.current.serverName).toBe("sparky");
-    expect(result.current.getToolName("create_agent")).toBe(
-      "sparky__create_agent",
-    );
-    expect(result.current.getToolShortName("sparky__create_agent")).toBe(
-      "create_agent",
-    );
-    expect(result.current.isToolName("sparky__create_agent")).toBe(true);
-    expect(result.current.isToolName("archestra__create_agent")).toBe(true);
+    expect(result.current.getToolName("api")).toBe("sparky__api");
+    expect(result.current.getToolShortName("sparky__api")).toBe("api");
+    expect(result.current.isToolName("sparky__api")).toBe(true);
+    expect(result.current.isToolName("archestra__api")).toBe(true);
   });
 
   it("returns stable references across rerenders when branding inputs are unchanged", () => {

@@ -261,16 +261,16 @@ describe("filterToolNamesByPermission", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    // Custom role with only agent:read — no knowledgeSources permissions
+    // Custom role with only skill:read — no knowledgeSources permissions
     const role = await makeCustomRole(org.id, {
-      permission: { agent: ["read"] },
+      permission: { skill: ["read"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
 
     const result = await filterToolNamesByPermission(
       [
         t("whoami"),
-        t("get_agent"),
+        t("list_skills"),
         t("create_knowledge_base"),
         t("get_knowledge_bases"),
       ],
@@ -279,7 +279,7 @@ describe("filterToolNamesByPermission", () => {
     );
 
     expect(result.has(t("whoami"))).toBe(true); // null perm
-    expect(result.has(t("get_agent"))).toBe(true); // agent:read ✓
+    expect(result.has(t("list_skills"))).toBe(true); // skill:read ✓
     expect(result.has(t("create_knowledge_base"))).toBe(false); // knowledgeSources:create ✗
     expect(result.has(t("get_knowledge_bases"))).toBe(false); // knowledgeSources:read ✗
   });
@@ -295,10 +295,10 @@ describe("filterToolNamesByPermission", () => {
 
     const allTools = [
       t("whoami"),
-      t("create_agent"),
+      t("query_knowledge_sources"),
       t("create_knowledge_base"),
-      t("delete_limit"),
-      t("create_tool_invocation_policy"),
+      t("delete_knowledge_base"),
+      t("list_skills"),
     ];
 
     const result = await filterToolNamesByPermission(
@@ -311,7 +311,7 @@ describe("filterToolNamesByPermission", () => {
 
   test("handles missing userId gracefully", async () => {
     const result = await filterToolNamesByPermission(
-      [t("whoami"), t("create_agent"), "external__tool"],
+      [t("whoami"), t("query_knowledge_sources"), "external__tool"],
       undefined,
       "org-id",
     );
@@ -319,7 +319,7 @@ describe("filterToolNamesByPermission", () => {
     // Only null-perm Archestra tools and non-Archestra tools should be included
     expect(result.has(t("whoami"))).toBe(true);
     expect(result.has("external__tool")).toBe(true);
-    expect(result.has(t("create_agent"))).toBe(false);
+    expect(result.has(t("query_knowledge_sources"))).toBe(false);
   });
 
   test("loads user permissions once for repeated permission checks", async ({
@@ -335,8 +335,8 @@ describe("filterToolNamesByPermission", () => {
 
     const result = await filterToolNamesByPermission(
       [
-        t("create_agent"),
-        t("get_agent"),
+        t("query_knowledge_sources"),
+        t("get_knowledge_base"),
         t("create_knowledge_base"),
         t("get_knowledge_bases"),
       ],
