@@ -10,6 +10,7 @@ import {
   parseFullToolName,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
+  TOOL_API_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -926,14 +927,24 @@ class ToolModel {
 
     const discoveredToolIdsToMigrate = discoveredTools
       .filter((tool) => {
-        const { serverName, shortName } = parseArchestraBuiltInName(tool.name);
-        if (!shortName) {
+        const { serverName, toolName: shortName } = parseFullToolName(
+          tool.name,
+        );
+        const isArchestraServer =
+          serverName === archestraMcpBranding.serverName ||
+          serverName === "archestra";
+        if (!isArchestraServer) {
           return false;
         }
 
+        // adopt current built-ins and legacy platform tools (folded into
+        // archestra__api) so the stale-delete path below can migrate their
+        // assignments and remove them — a pre-catalog org may still hold these
+        // legacy tools with catalog_id = NULL.
         return (
-          serverName === archestraMcpBranding.serverName ||
-          serverName === "archestra"
+          (ARCHESTRA_TOOL_SHORT_NAMES as readonly string[]).includes(
+            shortName,
+          ) || LEGACY_PLATFORM_TOOL_SHORT_NAMES.has(shortName)
         );
       })
       .map((tool) => tool.id);
@@ -1023,6 +1034,12 @@ class ToolModel {
       (t) => !archestraToolNames.has(t.name),
     );
     if (staleTools.length > 0) {
+      // The api tool was inserted above, so its assignments can be backfilled
+      // before the cascade delete drops the legacy platform-tool assignments.
+      await ToolModel.migrateLegacyPlatformToolAssignmentsToApi(
+        staleTools,
+        catalogId,
+      );
       await db.delete(schema.toolsTable).where(
         inArray(
           schema.toolsTable.id,
@@ -1038,6 +1055,65 @@ class ToolModel {
     // Names of tools created on this run — used by callers to trigger
     // one-time backfills when a new built-in tool first appears.
     return toolsToInsert.map((tool) => tool.name);
+  }
+
+  /**
+   * Upgrade migration: the dedicated platform-operation tools
+   * (create_agent, deploy_mcp_server, …) were folded into the single
+   * archestra__api tool. Those legacy tools are removed as stale during
+   * seeding, and the FK cascade would silently drop their agent assignments —
+   * leaving agents that relied on them with no platform-operation capability.
+   *
+   * This reassigns archestra__api to every agent that held any legacy platform
+   * tool, and must run BEFORE the stale delete (the api row is inserted earlier
+   * in the same seed run). Self-limiting: once the legacy rows are gone, later
+   * runs find no legacy tools among `staleTools` and this is a no-op.
+   */
+  private static async migrateLegacyPlatformToolAssignmentsToApi(
+    staleTools: Array<{ id: string; name: string }>,
+    catalogId: string,
+  ): Promise<void> {
+    const legacyToolIds = staleTools
+      .filter((t) => {
+        const { toolName: shortName } = parseFullToolName(t.name);
+        return LEGACY_PLATFORM_TOOL_SHORT_NAMES.has(shortName);
+      })
+      .map((t) => t.id);
+    if (legacyToolIds.length === 0) {
+      return;
+    }
+
+    const apiToolName = archestraMcpBranding.getToolName(TOOL_API_SHORT_NAME);
+    const [apiTool] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.name, apiToolName),
+        ),
+      );
+    if (!apiTool) {
+      logger.warn(
+        { apiToolName },
+        "archestra__api tool not found; skipping legacy platform-tool assignment migration",
+      );
+      return;
+    }
+
+    const assignedAgents = await db
+      .selectDistinct({ agentId: schema.agentToolsTable.agentId })
+      .from(schema.agentToolsTable)
+      .where(inArray(schema.agentToolsTable.toolId, legacyToolIds));
+
+    for (const { agentId } of assignedAgents) {
+      await AgentToolModel.createManyIfNotExists(agentId, [apiTool.id]);
+    }
+
+    logger.info(
+      { migratedAgentCount: assignedAgents.length },
+      "Migrated legacy platform-tool assignments to archestra__api",
+    );
   }
 
   /**
@@ -2511,6 +2587,51 @@ class ToolModel {
 }
 
 export default ToolModel;
+
+// Frozen list of the dedicated platform-operation tools that were folded into
+// the single archestra__api tool. Used only by the one-time upgrade migration
+// in seedArchestraTools to preserve agent assignments; do not extend.
+const LEGACY_PLATFORM_TOOL_SHORT_NAMES = new Set<string>([
+  "create_agent",
+  "get_agent",
+  "list_agents",
+  "edit_agent",
+  "create_llm_proxy",
+  "get_llm_proxy",
+  "edit_llm_proxy",
+  "create_mcp_gateway",
+  "get_mcp_gateway",
+  "edit_mcp_gateway",
+  "search_private_mcp_registry",
+  "get_mcp_servers",
+  "get_mcp_server_tools",
+  "edit_mcp_description",
+  "edit_mcp_config",
+  "create_mcp_server",
+  "deploy_mcp_server",
+  "list_mcp_server_deployments",
+  "get_mcp_server_logs",
+  "create_mcp_server_installation_request",
+  "create_limit",
+  "get_limits",
+  "update_limit",
+  "delete_limit",
+  "get_agent_token_usage",
+  "get_llm_proxy_token_usage",
+  "get_autonomy_policy_operators",
+  "get_tool_invocation_policies",
+  "create_tool_invocation_policy",
+  "get_tool_invocation_policy",
+  "update_tool_invocation_policy",
+  "delete_tool_invocation_policy",
+  "get_trusted_data_policies",
+  "create_trusted_data_policy",
+  "get_trusted_data_policy",
+  "update_trusted_data_policy",
+  "delete_trusted_data_policy",
+  "bulk_assign_tools_to_agents",
+  "bulk_assign_tools_to_mcp_gateways",
+]);
 
 /** @public — exported for testability */
 export function parseArchestraBuiltInName(toolName: string): {

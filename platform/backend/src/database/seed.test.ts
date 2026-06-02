@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
@@ -182,6 +183,92 @@ describe("seedArchestraApiDefaultPolicy", () => {
     await seedArchestraCatalogAndTools();
 
     expect(await apiToolPolicies(apiTool.id)).toHaveLength(0);
+  });
+});
+
+describe("migrateLegacyPlatformToolAssignmentsToApi", () => {
+  async function agentHasTool(
+    agentId: string,
+    toolId: string,
+  ): Promise<boolean> {
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          eq(schema.agentToolsTable.toolId, toolId),
+        ),
+      );
+    return rows.length > 0;
+  }
+
+  test("reassigns archestra__api to agents that held a removed legacy platform tool", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    await seedArchestraCatalogAndTools();
+
+    const apiTool = await ToolModel.findByName(TOOL_API_FULL_NAME);
+    if (!apiTool) {
+      throw new Error("archestra__api tool was not seeded");
+    }
+
+    const agent = await makeAgent();
+
+    // simulate a pre-upgrade deployment: a legacy platform tool, now folded
+    // into archestra__api, explicitly assigned to the agent.
+    const legacyToolName = "archestra__deploy_mcp_server";
+    const [legacyTool] = await db
+      .insert(schema.toolsTable)
+      .values({ name: legacyToolName, catalogId: ARCHESTRA_MCP_CATALOG_ID })
+      .returning();
+    await db
+      .insert(schema.agentToolsTable)
+      .values({ agentId: agent.id, toolId: legacyTool.id });
+
+    expect(await agentHasTool(agent.id, apiTool.id)).toBe(false);
+
+    // upgrade seeding removes the legacy tool; the capability must survive.
+    await seedArchestraCatalogAndTools();
+
+    expect(await agentHasTool(agent.id, apiTool.id)).toBe(true);
+    expect(await ToolModel.findByName(legacyToolName)).toBeNull();
+  });
+
+  test("reassigns archestra__api for a pre-catalog legacy tool with catalog_id = NULL", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    await seedArchestraCatalogAndTools();
+
+    const apiTool = await ToolModel.findByName(TOOL_API_FULL_NAME);
+    if (!apiTool) {
+      throw new Error("archestra__api tool was not seeded");
+    }
+
+    const agent = await makeAgent();
+
+    // simulate a deployment that predates the tool catalog: the legacy platform
+    // tool was discovered with catalog_id = NULL and never adopted into the
+    // catalog, yet remains explicitly assigned to the agent.
+    const legacyToolName = "archestra__deploy_mcp_server";
+    const [legacyTool] = await db
+      .insert(schema.toolsTable)
+      .values({ name: legacyToolName, catalogId: null })
+      .returning();
+    await db
+      .insert(schema.agentToolsTable)
+      .values({ agentId: agent.id, toolId: legacyTool.id });
+
+    expect(await agentHasTool(agent.id, apiTool.id)).toBe(false);
+
+    await seedArchestraCatalogAndTools();
+
+    expect(await agentHasTool(agent.id, apiTool.id)).toBe(true);
+    expect(await ToolModel.findByName(legacyToolName)).toBeNull();
   });
 });
 

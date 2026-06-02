@@ -57,6 +57,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
+import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -347,17 +348,18 @@ export async function createAgentServer(
 
           // The gateway tools/call path is an autonomous channel with no human
           // approval grant, so enforce invocation policies fail-closed here. In
-          // practice this only gates archestra__api writes — every other built-in
+          // practice this only gates archestra__api — every other built-in
           // bypasses policies — but without it a profile-token client could issue
-          // platform writes with RBAC only, skipping the approval gate the chat
-          // path enforces via needsApproval.
-          const approvalBlock = await blockIfApprovalRequired(
+          // platform writes with RBAC only, skipping both the block policies and
+          // the approval gate the chat path enforces.
+          const policyBlock = await blockIfPolicyDenies(
             name,
+            agent.id,
             args,
             tokenAuth,
           );
-          if (approvalBlock) {
-            return approvalBlock;
+          if (policyBlock) {
+            return policyBlock;
           }
 
           // Handle Archestra and agent delegation tools directly
@@ -1527,11 +1529,17 @@ function isArchestraApiTool(toolName: string) {
   );
 }
 
-// Fail-closed approval gate for the gateway tools/call path. Returns an error
-// result when the tool's invocation policy requires human approval (which this
-// autonomous channel cannot grant), or null to let execution proceed.
-async function blockIfApprovalRequired(
+// Fail-closed policy gate for the gateway tools/call path. Returns an error
+// result when an invocation policy denies the call, or null to let execution
+// proceed. Two disjoint checks: evaluateBatch enforces hard blocks
+// (block_always), and checkApprovalRequired enforces require_approval — which
+// this autonomous channel can never grant. A direct gateway call carries no
+// untrusted conversational data, so it is evaluated as a trusted context: that
+// keeps block_always and require_approval enforced while leaving unpoliced
+// reads and block_when_context_is_untrusted policies unaffected.
+async function blockIfPolicyDenies(
   toolName: string,
+  agentId: string,
   args: Record<string, unknown> | undefined,
   tokenAuth: TokenAuthContext | null | undefined,
 ): Promise<CallToolResult | null> {
@@ -1544,24 +1552,41 @@ async function blockIfApprovalRequired(
   const globalToolPolicy: GlobalToolPolicy =
     organization?.globalToolPolicy ?? "permissive";
 
+  const context: PolicyEvaluationContext = {
+    teamIds: tokenAuth?.teamId ? [tokenAuth.teamId] : [],
+  };
+  const toolInput = isRecord(args) ? args : {};
+
+  const evaluation = await ToolInvocationPolicyModel.evaluateBatch(
+    agentId,
+    [{ toolCallName: toolName, toolInput }],
+    context,
+    true,
+    globalToolPolicy,
+  );
+  if (!evaluation.isAllowed) {
+    return policyDeniedResult(evaluation.reason);
+  }
+
   const approvalRequired =
     await ToolInvocationPolicyModel.checkApprovalRequired(
       toolName,
-      isRecord(args) ? args : {},
-      { teamIds: tokenAuth?.teamId ? [tokenAuth.teamId] : [] },
+      toolInput,
+      context,
       globalToolPolicy,
     );
-  if (!approvalRequired) {
-    return null;
+  if (approvalRequired) {
+    return policyDeniedResult(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
   }
 
+  return null;
+}
+
+function policyDeniedResult(text: string): CallToolResult {
   return {
-    content: [
-      {
-        type: "text" as const,
-        text: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-      },
-    ],
+    content: [{ type: "text" as const, text }],
     isError: true,
   };
 }

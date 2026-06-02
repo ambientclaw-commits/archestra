@@ -562,6 +562,80 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
+  test("blocks archestra__api calls denied by a block_always policy on the tools/call path", async ({
+    makeAgent,
+    makeOrganization,
+    makeToolPolicy,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    // hard block policies are only enforced outside permissive mode.
+    await OrganizationModel.patch(org.id, { globalToolPolicy: "restrictive" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const apiTool = await ToolModel.findByName(TOOL_API_FULL_NAME);
+    if (!apiTool) {
+      throw new Error("archestra__api tool was not seeded");
+    }
+    const blockReason = "Archestra API writes are hard-blocked by policy.";
+    await makeToolPolicy(apiTool.id, {
+      conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+      action: "block_always",
+      reason: blockReason,
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const callResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: TOOL_API_FULL_NAME,
+          arguments: {
+            method: "DELETE",
+            path: "/api/agents/some-id",
+          },
+        },
+        id: 2,
+      },
+    });
+
+    expect(callResponse.statusCode).toBe(200);
+    const result = callResponse.json().result;
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(blockReason);
+  });
+
   test("hides directly assigned tools except api from tools/list when toolExposureMode is search_and_run_only", async ({
     makeAgent,
     makeOrganization,
