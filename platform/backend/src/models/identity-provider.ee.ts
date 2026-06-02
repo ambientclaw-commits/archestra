@@ -15,6 +15,7 @@ import {
 } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
@@ -810,6 +811,31 @@ class IdentityProviderModel {
     );
     if (!existingProvider) {
       return false;
+    }
+
+    // agents.identity_provider_id is ON DELETE SET NULL, so deleting a provider
+    // detaches every agent bound to it (MCP gateways and LLM proxies that
+    // validate caller JWTs against this IdP's JWKS) with no other trace — their
+    // external-JWT auth then fails (401) until they are rebound. Surface that
+    // here so an operator isn't left guessing.
+    const boundAgents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.identityProviderId, id),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    if (boundAgents.length > 0) {
+      logger.warn(
+        {
+          identityProviderId: id,
+          organizationId,
+          boundAgentCount: boundAgents.length,
+        },
+        "Deleting identity provider detaches agents bound to it for external-JWT (JWKS) auth; those agents will reject JWTs until rebound to a provider",
+      );
     }
 
     // Wrap deletions in a transaction to ensure atomicity
