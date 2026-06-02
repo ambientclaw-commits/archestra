@@ -309,6 +309,9 @@ export async function syncBuiltInSkills(): Promise<void> {
  * Seeds Archestra MCP catalog and tools.
  * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
  * Tools are NOT automatically assigned to agents - users must assign them manually.
+ *
+ * @public — also imported directly by seed tests, not only reached via
+ * {@link seedRequiredStartingData}.
  */
 export async function seedArchestraCatalogAndTools(): Promise<void> {
   const newlyCreatedToolNames = await ToolModel.seedArchestraTools(

@@ -19,14 +19,14 @@ export type LoopbackIdentity = {
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type LoopbackRequest = LoopbackIdentity & {
+type LoopbackRequest = LoopbackIdentity & {
   method: HttpMethod;
   path: string;
   query?: Record<string, string>;
   body?: unknown;
 };
 
-export type LoopbackResponse = {
+type LoopbackResponse = {
   status: number;
   body: unknown;
 };
