@@ -1,6 +1,7 @@
 import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  TOOL_API_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -484,7 +485,7 @@ describe("MCP Gateway (stateless mode)", () => {
     );
   });
 
-  test("hides directly assigned tools from tools/list when toolExposureMode is search_and_run_only", async ({
+  test("hides directly assigned tools except api from tools/list when toolExposureMode is search_and_run_only", async ({
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
@@ -537,8 +538,14 @@ describe("MCP Gateway (stateless mode)", () => {
     const toolNames = response
       .json()
       .result.tools.map((tool: { name: string }) => tool.name);
+    // api stays exposed because run_tool refuses to dispatch it, so it must be
+    // directly callable for its invocation policy to fire.
     expect(toolNames.sort()).toEqual(
-      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+      [
+        TOOL_API_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+      ].sort(),
     );
     expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
   });

@@ -10,6 +10,7 @@ import {
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
+  TOOL_API_SHORT_NAME,
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
@@ -668,6 +669,14 @@ function ChatSessionHook({
         });
       }
 
+      // Agents are now created/updated through the generic api tool rather than
+      // a dedicated create_agent tool, so the cached useInternalAgents() list can
+      // go stale on an agents write. Invalidate it so the prompt input's agent
+      // selector reflects the change.
+      if (toolShortName === TOOL_API_SHORT_NAME && isApiAgentsWrite(toolCall)) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+      }
+
       // Detect artifact_write tool and invalidate conversation to fetch updated artifact
       if (toolShortName === TOOL_ARTIFACT_WRITE_SHORT_NAME) {
         // Small delay to ensure backend has saved the artifact
@@ -851,6 +860,31 @@ function ChatSessionHook({
   ]);
 
   return null;
+}
+
+// Whether an api tool call is a non-GET write to an /api/agents path, i.e. the
+// kind of call that creates or mutates agents and should refresh the cache.
+function isApiAgentsWrite(toolCall: unknown): boolean {
+  if (typeof toolCall !== "object" || toolCall === null) {
+    return false;
+  }
+
+  const args =
+    "args" in toolCall && typeof toolCall.args === "object" && toolCall.args
+      ? (toolCall.args as Record<string, unknown>)
+      : undefined;
+  if (!args) {
+    return false;
+  }
+
+  const method = typeof args.method === "string" ? args.method : undefined;
+  const path = typeof args.path === "string" ? args.path : undefined;
+  return (
+    method !== undefined &&
+    method.toUpperCase() !== "GET" &&
+    path !== undefined &&
+    path.startsWith("/api/agents")
+  );
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {

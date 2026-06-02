@@ -19,6 +19,7 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
+  TOOL_API_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -1364,6 +1365,12 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
+    // archestra__api must stay directly exposed in both modes: run_tool refuses
+    // to dispatch it (so its invocation policy fires only on direct calls), so
+    // hiding it in search_and_run_only would make an assigned api unreachable.
+    if (isArchestraApiTool(tool.name)) {
+      return true;
+    }
     const isMetaTool = isArchestraMetaTool(tool.name);
     return toolExposureMode === "search_and_run_only"
       ? isMetaTool
@@ -1491,5 +1498,11 @@ function isArchestraMetaTool(toolName: string) {
   return (
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
+  );
+}
+
+function isArchestraApiTool(toolName: string) {
+  return (
+    archestraMcpBranding.getToolShortName(toolName) === TOOL_API_SHORT_NAME
   );
 }

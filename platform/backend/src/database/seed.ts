@@ -13,10 +13,11 @@ import {
   type PredefinedRoleName,
   type SupportedProvider,
   SupportedProviders,
-  TOOL_API_FULL_NAME,
+  TOOL_API_SHORT_NAME,
   testMcpServerCommand,
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config, { getProviderEnvApiKey } from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
@@ -324,14 +325,18 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
  * so later admin edits (relaxations, removals) are preserved across restarts.
  */
 async function seedArchestraApiDefaultPolicy(): Promise<void> {
+  // Resolve the same (possibly white-labeled) name seedArchestraTools wrote, so
+  // a branded deployment still finds its tool row instead of the default name.
+  const apiToolName = archestraMcpBranding.getToolName(TOOL_API_SHORT_NAME);
   const [apiTool] = await db
     .select({ id: schema.toolsTable.id })
     .from(schema.toolsTable)
-    .where(eq(schema.toolsTable.name, TOOL_API_FULL_NAME));
+    .where(eq(schema.toolsTable.name, apiToolName));
 
   if (!apiTool) {
     logger.warn(
-      "archestra__api tool row not found; skipping default policy seed",
+      { apiToolName },
+      "Archestra API tool row not found; skipping default policy seed",
     );
     return;
   }
