@@ -3,6 +3,7 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   TOOL_API_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@shared";
@@ -12,7 +13,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
+import { OrganizationModel, TeamTokenModel, ToolModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -482,6 +483,82 @@ describe("MCP Gateway (stateless mode)", () => {
           text: expect.stringContaining(agent.id),
         }),
       ]),
+    );
+  });
+
+  test("blocks archestra__api writes that require approval on the tools/call path", async ({
+    makeAgent,
+    makeOrganization,
+    makeToolPolicy,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    // approval gating is only active outside permissive mode.
+    await OrganizationModel.patch(org.id, { globalToolPolicy: "restrictive" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const apiTool = await ToolModel.findByName(TOOL_API_FULL_NAME);
+    if (!apiTool) {
+      throw new Error("archestra__api tool was not seeded");
+    }
+    await makeToolPolicy(apiTool.id, {
+      conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+      action: "require_approval",
+      reason: "Archestra API writes require human approval by default.",
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const callResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: TOOL_API_FULL_NAME,
+          arguments: {
+            method: "POST",
+            path: "/api/agents",
+            body: { name: "should-not-be-created" },
+          },
+        },
+        id: 2,
+      },
+    });
+
+    expect(callResponse.statusCode).toBe(200);
+    const result = callResponse.json().result;
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     );
   });
 

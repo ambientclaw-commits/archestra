@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  type CallToolResult,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -20,6 +21,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_API_SHORT_NAME,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -47,7 +49,9 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  OrganizationModel,
   TeamTokenModel,
+  ToolInvocationPolicyModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -68,6 +72,7 @@ import type {
   AgentAccessContext,
   AgentType,
   CommonToolCall,
+  GlobalToolPolicy,
   SelectTeamToken,
   SelectUserToken,
   ToolExposureMode,
@@ -339,6 +344,21 @@ export async function createAgentServer(
               ? "Agent delegation tool call received"
               : "Archestra MCP tool call received",
           );
+
+          // The gateway tools/call path is an autonomous channel with no human
+          // approval grant, so enforce invocation policies fail-closed here. In
+          // practice this only gates archestra__api writes — every other built-in
+          // bypasses policies — but without it a profile-token client could issue
+          // platform writes with RBAC only, skipping the approval gate the chat
+          // path enforces via needsApproval.
+          const approvalBlock = await blockIfApprovalRequired(
+            name,
+            args,
+            tokenAuth,
+          );
+          if (approvalBlock) {
+            return approvalBlock;
+          }
 
           // Handle Archestra and agent delegation tools directly
           const response = await startActiveMcpSpan({
@@ -1505,4 +1525,43 @@ function isArchestraApiTool(toolName: string) {
   return (
     archestraMcpBranding.getToolShortName(toolName) === TOOL_API_SHORT_NAME
   );
+}
+
+// Fail-closed approval gate for the gateway tools/call path. Returns an error
+// result when the tool's invocation policy requires human approval (which this
+// autonomous channel cannot grant), or null to let execution proceed.
+async function blockIfApprovalRequired(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  tokenAuth: TokenAuthContext | null | undefined,
+): Promise<CallToolResult | null> {
+  const organizationId = tokenAuth?.organizationId;
+  if (!organizationId) {
+    return null;
+  }
+
+  const organization = await OrganizationModel.getById(organizationId);
+  const globalToolPolicy: GlobalToolPolicy =
+    organization?.globalToolPolicy ?? "permissive";
+
+  const approvalRequired =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      toolName,
+      isRecord(args) ? args : {},
+      { teamIds: tokenAuth?.teamId ? [tokenAuth.teamId] : [] },
+      globalToolPolicy,
+    );
+  if (!approvalRequired) {
+    return null;
+  }
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+      },
+    ],
+    isError: true,
+  };
 }

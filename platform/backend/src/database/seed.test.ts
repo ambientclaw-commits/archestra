@@ -4,10 +4,11 @@ import {
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  TOOL_API_FULL_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { SkillFileModel, SkillModel } from "@/models";
+import { SkillFileModel, SkillModel, ToolModel } from "@/models";
 import AgentModel from "@/models/agent";
 import {
   BUILT_IN_SKILLS,
@@ -15,7 +16,11 @@ import {
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+import {
+  seedArchestraCatalogAndTools,
+  syncBuiltInAgents,
+  syncBuiltInSkills,
+} from "./seed";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -142,6 +147,43 @@ Examples:
 - File writes: invocation="block_always", result="mark_as_trusted"
 - External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
+
+describe("seedArchestraApiDefaultPolicy", () => {
+  async function apiToolPolicies(toolId: string) {
+    return db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
+  }
+
+  test("seeds the default api policy once and never resurrects it after an admin deletes it", async ({
+    makeOrganization,
+  }) => {
+    // seedArchestraTools resolves branding from the first organization.
+    await makeOrganization();
+
+    await seedArchestraCatalogAndTools();
+
+    const apiTool = await ToolModel.findByName(TOOL_API_FULL_NAME);
+    if (!apiTool) {
+      throw new Error("archestra__api tool was not seeded");
+    }
+
+    const seeded = await apiToolPolicies(apiTool.id);
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0].action).toBe("require_approval");
+
+    // an admin intentionally removes the gate.
+    await db
+      .delete(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, apiTool.id));
+
+    // a later restart must not bring the deleted policy back.
+    await seedArchestraCatalogAndTools();
+
+    expect(await apiToolPolicies(apiTool.id)).toHaveLength(0);
+  });
+});
 
 describe("syncBuiltInSkills", () => {
   async function countBuiltInSkills(organizationId: string): Promise<number> {

@@ -310,24 +310,33 @@ export async function syncBuiltInSkills(): Promise<void> {
  * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
-async function seedArchestraCatalogAndTools(): Promise<void> {
+export async function seedArchestraCatalogAndTools(): Promise<void> {
   const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
-  await seedArchestraApiDefaultPolicy();
+  await seedArchestraApiDefaultPolicy(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 
 /**
  * Default tool-invocation policy for `archestra__api`: writes (any non-GET
- * method) require human approval. Seeded only when the tool has no policies yet,
- * so later admin edits (relaxations, removals) are preserved across restarts.
+ * method) require human approval. Seeded once, the first time the api tool row
+ * itself is created — the persistent tool row is the one-time marker. On later
+ * restarts the tool already exists, so a policy an admin intentionally deleted
+ * is never resurrected (and admin relaxations are likewise preserved).
  */
-async function seedArchestraApiDefaultPolicy(): Promise<void> {
+async function seedArchestraApiDefaultPolicy(
+  newlyCreatedToolNames: string[],
+): Promise<void> {
   // Resolve the same (possibly white-labeled) name seedArchestraTools wrote, so
   // a branded deployment still finds its tool row instead of the default name.
   const apiToolName = archestraMcpBranding.getToolName(TOOL_API_SHORT_NAME);
+
+  if (!newlyCreatedToolNames.includes(apiToolName)) {
+    return;
+  }
+
   const [apiTool] = await db
     .select({ id: schema.toolsTable.id })
     .from(schema.toolsTable)
@@ -338,15 +347,6 @@ async function seedArchestraApiDefaultPolicy(): Promise<void> {
       { apiToolName },
       "Archestra API tool row not found; skipping default policy seed",
     );
-    return;
-  }
-
-  const existing = await db
-    .select({ id: schema.toolInvocationPoliciesTable.id })
-    .from(schema.toolInvocationPoliciesTable)
-    .where(eq(schema.toolInvocationPoliciesTable.toolId, apiTool.id));
-
-  if (existing.length > 0) {
     return;
   }
 
