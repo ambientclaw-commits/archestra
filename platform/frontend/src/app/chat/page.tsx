@@ -41,6 +41,7 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
+  type OptimisticToolCall,
 } from "@/components/chat/chat-messages.utils";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -159,6 +160,15 @@ import ArchestraPromptInput, {
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
+
+// Stable empty defaults: falling back to a fresh `[]`/`{}` on every render gives
+// `useMemo` deps a new reference each time, which re-runs the canvas/browser
+// effects on every render and thrashes the chat page during an active stream.
+const EMPTY_OPTIMISTIC_TOOL_CALLS: OptimisticToolCall[] = [];
+const EMPTY_EARLY_TOOL_UI_STARTS: Record<
+  string,
+  { uiResourceUri?: string; toolName?: string }
+> = {};
 
 export function ChatPageContent({
   routeConversationId,
@@ -915,7 +925,7 @@ export function ChatPageContent({
     () =>
       deriveCanvasesFromMessages(
         messages,
-        chatSession?.earlyToolUiStarts ?? {},
+        chatSession?.earlyToolUiStarts ?? EMPTY_EARLY_TOOL_UI_STARTS,
       ),
     [messages, chatSession?.earlyToolUiStarts],
   );
@@ -930,7 +940,8 @@ export function ChatPageContent({
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
-  const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
+  const optimisticToolCalls =
+    chatSession?.optimisticToolCalls ?? EMPTY_OPTIMISTIC_TOOL_CALLS;
   const browserToolCallIds = useMemo(
     () =>
       collectBrowserToolCallIds({
