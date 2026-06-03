@@ -69,6 +69,50 @@ describe("checkApprovalRequired for archestra__api", () => {
     ).toBe(true);
   });
 
+  test("default permissive org still gates non-GET, leaves GET open", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: TOOL_API_FULL_NAME });
+    await makeToolPolicy(tool.id, {
+      conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+      action: "require_approval",
+    });
+
+    // permissive is the default org policy; the seeded gate must survive it.
+    const approvalFor = (method: string) =>
+      ToolInvocationPolicyModel.checkApprovalRequired(
+        TOOL_API_FULL_NAME,
+        { method, path: "/api/agents" },
+        CONTEXT,
+        "permissive",
+      );
+
+    expect(await approvalFor("POST")).toBe(true);
+    expect(await approvalFor("GET")).toBe(false);
+  });
+
+  test("permissive mode keeps bypassing approval for ordinary archestra tools", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: TOOL_WHOAMI_FULL_NAME });
+    await makeToolPolicy(tool.id, {
+      conditions: [{ key: "method", operator: "notEqual", value: "GET" }],
+      action: "require_approval",
+    });
+
+    // only archestra__api is carved out of the permissive short-circuit.
+    expect(
+      await ToolInvocationPolicyModel.checkApprovalRequired(
+        TOOL_WHOAMI_FULL_NAME,
+        { method: "POST" },
+        CONTEXT,
+        "permissive",
+      ),
+    ).toBe(false);
+  });
+
   test("other archestra tools bypass policies entirely", async ({
     makeTool,
     makeToolPolicy,

@@ -227,8 +227,15 @@ class ToolInvocationPolicyModel {
     context: PolicyEvaluationContext,
     globalToolPolicy: GlobalToolPolicy,
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
-    if (globalToolPolicy === "permissive") {
+    // Permissive mode: skip all approval checks (consistent with evaluateBatch),
+    // except for archestra__api. It is a broad REST write primitive whose seeded
+    // require_approval gate must stay effective regardless of the org-wide
+    // permissive setting; otherwise the default org (permissive) silently
+    // nullifies the approval policy this tool ships with.
+    if (
+      globalToolPolicy === "permissive" &&
+      !archestraMcpBranding.isApiTool(toolName)
+    ) {
       return false;
     }
 
