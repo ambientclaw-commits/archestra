@@ -376,8 +376,8 @@ export default class K8sDeployment {
       await this.applyCiliumNetworkPolicy(policyName, effectivePolicy);
       await Promise.all([
         this.deleteKubernetesNetworkPolicy(policyName),
-        this.deleteGkeFqdnNetworkPolicy(policyName),
-        this.deleteAwsApplicationNetworkPolicy(policyName),
+        this.deleteGkeFqdnNetworkPolicyIfManageable(policyName),
+        this.deleteAwsApplicationNetworkPolicyIfManageable(policyName),
       ]);
       return;
     }
@@ -393,8 +393,8 @@ export default class K8sDeployment {
       await this.applyKubernetesNetworkPolicy(policyName, effectivePolicy);
       await this.applyGkeFqdnNetworkPolicy(policyName, effectivePolicy);
       await Promise.all([
-        this.deleteCiliumNetworkPolicy(policyName),
-        this.deleteAwsApplicationNetworkPolicy(policyName),
+        this.deleteCiliumNetworkPolicyIfManageable(policyName),
+        this.deleteAwsApplicationNetworkPolicyIfManageable(policyName),
       ]);
       return;
     }
@@ -408,17 +408,17 @@ export default class K8sDeployment {
       await this.applyAwsApplicationNetworkPolicy(policyName, effectivePolicy);
       await Promise.all([
         this.deleteKubernetesNetworkPolicy(policyName),
-        this.deleteCiliumNetworkPolicy(policyName),
-        this.deleteGkeFqdnNetworkPolicy(policyName),
+        this.deleteCiliumNetworkPolicyIfManageable(policyName),
+        this.deleteGkeFqdnNetworkPolicyIfManageable(policyName),
       ]);
       return;
     }
 
     await this.applyKubernetesNetworkPolicy(policyName, effectivePolicy);
     await Promise.all([
-      this.deleteCiliumNetworkPolicy(policyName),
-      this.deleteGkeFqdnNetworkPolicy(policyName),
-      this.deleteAwsApplicationNetworkPolicy(policyName),
+      this.deleteCiliumNetworkPolicyIfManageable(policyName),
+      this.deleteGkeFqdnNetworkPolicyIfManageable(policyName),
+      this.deleteAwsApplicationNetworkPolicyIfManageable(policyName),
     ]);
   }
 
@@ -693,10 +693,37 @@ export default class K8sDeployment {
     const policyName = this.getK8sNetworkPolicyName();
     await Promise.all([
       this.deleteKubernetesNetworkPolicy(policyName),
-      this.deleteCiliumNetworkPolicy(policyName),
-      this.deleteGkeFqdnNetworkPolicy(policyName),
-      this.deleteAwsApplicationNetworkPolicy(policyName),
+      this.deleteCiliumNetworkPolicyIfManageable(policyName),
+      this.deleteGkeFqdnNetworkPolicyIfManageable(policyName),
+      this.deleteAwsApplicationNetworkPolicyIfManageable(policyName),
     ]);
+  }
+
+  private async deleteCiliumNetworkPolicyIfManageable(
+    policyName: string,
+  ): Promise<void> {
+    if (!this.networkPolicyCapabilities?.ciliumNetworkPolicy) {
+      return;
+    }
+    await this.deleteCiliumNetworkPolicy(policyName);
+  }
+
+  private async deleteGkeFqdnNetworkPolicyIfManageable(
+    policyName: string,
+  ): Promise<void> {
+    if (!this.networkPolicyCapabilities?.gkeFqdnNetworkPolicy) {
+      return;
+    }
+    await this.deleteGkeFqdnNetworkPolicy(policyName);
+  }
+
+  private async deleteAwsApplicationNetworkPolicyIfManageable(
+    policyName: string,
+  ): Promise<void> {
+    if (!this.networkPolicyCapabilities?.awsApplicationNetworkPolicy) {
+      return;
+    }
+    await this.deleteAwsApplicationNetworkPolicy(policyName);
   }
 
   private async deleteKubernetesNetworkPolicy(

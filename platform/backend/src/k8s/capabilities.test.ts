@@ -10,21 +10,32 @@ describe("Kubernetes capability inspection", () => {
     clearK8sCapabilitiesCache();
   });
 
-  test("reports Cilium FQDN support when the CiliumNetworkPolicy CRD exists", async () => {
+  test("reports Cilium FQDN support when the CiliumNetworkPolicy CRD exists and can be managed", async () => {
     const customObjectsApi = {
       getAPIResources: vi.fn(async ({ group }: { group: string }) => ({
         resources:
           group === "cilium.io" ? [{ name: "ciliumnetworkpolicies" }] : [],
       })),
     };
+    const authApi = createAuthApi();
 
-    const capabilities = await getK8sCapabilitiesFromApi(
-      customObjectsApi as never,
-    );
+    const capabilities = await getCapabilities(customObjectsApi, authApi);
 
     expect(customObjectsApi.getAPIResources).toHaveBeenCalledWith({
       group: "cilium.io",
       version: "v2",
+    });
+    expect(authApi.createSelfSubjectAccessReview).toHaveBeenCalledWith({
+      body: {
+        spec: {
+          resourceAttributes: {
+            namespace: "test-ns",
+            verb: "delete",
+            group: "cilium.io",
+            resource: "ciliumnetworkpolicies",
+          },
+        },
+      },
     });
     expect(capabilities.networkPolicy).toMatchObject({
       kubernetesNetworkPolicy: true,
@@ -37,14 +48,35 @@ describe("Kubernetes capability inspection", () => {
     });
   });
 
+  test("falls back to Kubernetes NetworkPolicy when Cilium delete access is denied", async () => {
+    const customObjectsApi = {
+      getAPIResources: vi.fn(async ({ group }: { group: string }) => ({
+        resources:
+          group === "cilium.io" ? [{ name: "ciliumnetworkpolicies" }] : [],
+      })),
+    };
+    const authApi = createAuthApi(({ verb }) => verb !== "delete");
+
+    const capabilities = await getCapabilities(customObjectsApi, authApi);
+
+    expect(capabilities.networkPolicy).toMatchObject({
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes",
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+    });
+  });
+
   test("falls back to Kubernetes NetworkPolicy when the Cilium CRD is absent", async () => {
     const customObjectsApi = {
       getAPIResources: vi.fn().mockRejectedValue({ statusCode: 404 }),
     };
+    const authApi = createAuthApi();
 
-    const capabilities = await getK8sCapabilitiesFromApi(
-      customObjectsApi as never,
-    );
+    const capabilities = await getCapabilities(customObjectsApi, authApi);
 
     expect(capabilities.networkPolicy).toMatchObject({
       kubernetesNetworkPolicy: true,
@@ -66,10 +98,9 @@ describe("Kubernetes capability inspection", () => {
             : [],
       })),
     };
+    const authApi = createAuthApi();
 
-    const capabilities = await getK8sCapabilitiesFromApi(
-      customObjectsApi as never,
-    );
+    const capabilities = await getCapabilities(customObjectsApi, authApi);
 
     expect(capabilities.networkPolicy).toMatchObject({
       kubernetesNetworkPolicy: true,
@@ -91,10 +122,9 @@ describe("Kubernetes capability inspection", () => {
             : [],
       })),
     };
+    const authApi = createAuthApi();
 
-    const capabilities = await getK8sCapabilitiesFromApi(
-      customObjectsApi as never,
-    );
+    const capabilities = await getCapabilities(customObjectsApi, authApi);
 
     expect(capabilities.networkPolicy).toMatchObject({
       kubernetesNetworkPolicy: true,
@@ -111,11 +141,24 @@ describe("Kubernetes capability inspection", () => {
     const customObjectsApi = {
       getAPIResources: vi.fn(async () => ({ resources: [] })),
     };
+    const authApi = createAuthApi();
 
-    await getK8sCapabilitiesFromApi(customObjectsApi as never);
-    await getK8sCapabilitiesFromApi(customObjectsApi as never);
+    await getCapabilities(customObjectsApi, authApi);
+    await getCapabilities(customObjectsApi, authApi);
 
     expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(3);
+  });
+
+  test("caches CRD inspection separately per namespace", async () => {
+    const customObjectsApi = {
+      getAPIResources: vi.fn(async () => ({ resources: [] })),
+    };
+    const authApi = createAuthApi();
+
+    await getCapabilities(customObjectsApi, authApi, "first-ns");
+    await getCapabilities(customObjectsApi, authApi, "second-ns");
+
+    expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(6);
   });
 
   test("reprobes after the capability cache TTL expires", async () => {
@@ -124,11 +167,54 @@ describe("Kubernetes capability inspection", () => {
     const customObjectsApi = {
       getAPIResources: vi.fn(async () => ({ resources: [] })),
     };
+    const authApi = createAuthApi();
 
-    await getK8sCapabilitiesFromApi(customObjectsApi as never);
+    await getCapabilities(customObjectsApi, authApi);
     vi.advanceTimersByTime(5 * 60 * 1000 + 1);
-    await getK8sCapabilitiesFromApi(customObjectsApi as never);
+    await getCapabilities(customObjectsApi, authApi);
 
     expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(6);
   });
 });
+
+function createAuthApi(
+  isAllowed: (attributes: {
+    namespace: string;
+    verb: string;
+    group: string;
+    resource: string;
+  }) => boolean = () => true,
+) {
+  return {
+    createSelfSubjectAccessReview: vi.fn(
+      async (params: {
+        body: {
+          spec: {
+            resourceAttributes: {
+              namespace: string;
+              verb: string;
+              group: string;
+              resource: string;
+            };
+          };
+        };
+      }) => ({
+        status: {
+          allowed: isAllowed(params.body.spec.resourceAttributes),
+        },
+      }),
+    ),
+  };
+}
+
+function getCapabilities(
+  customObjectsApi: unknown,
+  authApi: unknown,
+  namespace = "test-ns",
+) {
+  return getK8sCapabilitiesFromApi({
+    customObjectsApi: customObjectsApi as never,
+    authApi: authApi as never,
+    namespace,
+  });
+}

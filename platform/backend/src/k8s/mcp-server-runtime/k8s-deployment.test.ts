@@ -3752,6 +3752,51 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     expect(createNamespacedCustomObject).not.toHaveBeenCalled();
   });
 
+  test("does not try to delete CiliumNetworkPolicy when Cilium is not manageable", async () => {
+    const deleteNamespacedCustomObject = vi
+      .fn()
+      .mockRejectedValue({ statusCode: 403 });
+    const createNamespacedNetworkPolicy = vi.fn().mockResolvedValue({});
+
+    const deployment = new K8sDeployment({
+      mcpServer: makeNetworkPolicyTestServer(),
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sNetworkingApi: {
+        createNamespacedNetworkPolicy,
+        deleteNamespacedNetworkPolicy: vi.fn().mockRejectedValue({
+          statusCode: 404,
+        }),
+      } as unknown as k8s.NetworkingV1Api,
+      k8sCustomObjectsApi: {
+        deleteNamespacedCustomObject,
+      } as unknown as k8s.CustomObjectsApi,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: {
+        kubernetesNetworkPolicy: true,
+        ciliumNetworkPolicy: false,
+        gkeFqdnNetworkPolicy: false,
+        awsApplicationNetworkPolicy: false,
+        provider: "kubernetes",
+        supportsFqdn: false,
+        supportsHttpMethods: false,
+        message: null,
+      },
+    });
+
+    await deployment.applyK8sNetworkPolicy();
+
+    expect(createNamespacedNetworkPolicy).toHaveBeenCalled();
+    expect(deleteNamespacedCustomObject).not.toHaveBeenCalled();
+  });
+
   test("throws a clear error when applying without the K8s networking API", async () => {
     const deployment = new K8sDeployment({
       mcpServer: makeNetworkPolicyTestServer(),

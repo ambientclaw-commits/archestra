@@ -124,6 +124,7 @@ export class McpServerRuntimeManager {
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
+      !this.k8sAuthApi ||
       !this.k8sNetworkingApi ||
       !this.k8sCustomObjectsApi
     ) {
@@ -164,16 +165,12 @@ export class McpServerRuntimeManager {
 
       logger.info(`Found ${localServers.length} local MCP servers to start`);
 
-      const networkPolicyCapabilities = (
-        await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
-      ).networkPolicy;
       const networkPolicyResolutionCache =
         await this.buildNetworkPolicyResolutionCache(localCatalogItems);
 
       // Start all local servers in parallel
       const startPromises = localServers.map(async (mcpServer) => {
         await this.startServer(mcpServer, undefined, undefined, {
-          networkPolicyCapabilities,
           networkPolicyResolutionCache,
         });
       });
@@ -496,6 +493,24 @@ export class McpServerRuntimeManager {
         }
       }
 
+      if (!this.k8sAuthApi) {
+        throw new Error("Kubernetes API client not initialized");
+      }
+
+      const namespace = await this.resolveNamespaceForCatalog(
+        catalogItem,
+        options?.networkPolicyResolutionCache,
+      );
+      const networkPolicyCapabilities =
+        options?.networkPolicyCapabilities ??
+        (
+          await getK8sCapabilitiesFromApi({
+            customObjectsApi: this.k8sCustomObjectsApi,
+            authApi: this.k8sAuthApi,
+            namespace,
+          })
+        ).networkPolicy;
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
@@ -504,10 +519,7 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(
-          catalogItem,
-          options?.networkPolicyResolutionCache,
-        ),
+        namespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -516,10 +528,7 @@ export class McpServerRuntimeManager {
           catalogItem,
           cache: options?.networkPolicyResolutionCache,
         }),
-        networkPolicyCapabilities:
-          options?.networkPolicyCapabilities ??
-          (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
-            .networkPolicy,
+        networkPolicyCapabilities,
         k8sExec: this.k8sExec,
       });
 
@@ -668,6 +677,7 @@ export class McpServerRuntimeManager {
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
+      !this.k8sAuthApi ||
       !this.k8sNetworkingApi ||
       !this.k8sCustomObjectsApi ||
       !this.k8sAttach ||
@@ -706,6 +716,13 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
+      if (!this.k8sAuthApi) {
+        throw new Error("Kubernetes API client not initialized");
+      }
+
+      const namespace =
+        namespaceOverride ??
+        (await this.resolveNamespaceForCatalog(catalogItem));
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
@@ -714,16 +731,18 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace:
-          namespaceOverride ??
-          (await this.resolveNamespaceForCatalog(catalogItem)),
+        namespace,
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
           mcpServer,
           catalogItem,
         }),
         networkPolicyCapabilities: (
-          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+          await getK8sCapabilitiesFromApi({
+            customObjectsApi: this.k8sCustomObjectsApi,
+            authApi: this.k8sAuthApi,
+            namespace,
+          })
         ).networkPolicy,
         k8sExec: this.k8sExec,
       });
