@@ -56,6 +56,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["admin", "deploy-to-restricted"],
   networkPolicy: ["read", "create", "update", "delete"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -118,6 +119,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["admin"],
   networkPolicy: ["read", "create", "update", "delete"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -180,6 +182,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
   networkPolicy: ["read"],
+  // minting installation tokens from a stored App credential is privileged;
+  // default members get no access — editors and admins manage/use App configs
+  githubAppConfig: [],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -305,6 +310,10 @@ export const permissionDescriptions: Record<string, string> = {
   "networkPolicy:create": "Create network policies",
   "networkPolicy:update": "Modify network policies",
   "networkPolicy:delete": "Delete network policies",
+  "githubAppConfig:read": "View GitHub App configurations",
+  "githubAppConfig:create": "Create GitHub App configurations",
+  "githubAppConfig:update": "Modify GitHub App configurations",
+  "githubAppConfig:delete": "Delete GitHub App configurations",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -1007,6 +1016,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteNetworkPolicy]: {
     networkPolicy: ["delete"],
   },
+  [RouteId.ListGithubAppConfigs]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.GetGithubAppConfig]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.CreateGithubAppConfig]: {
+    githubAppConfig: ["create"],
+  },
+  [RouteId.UpdateGithubAppConfig]: {
+    githubAppConfig: ["update"],
+  },
+  [RouteId.DeleteGithubAppConfig]: {
+    githubAppConfig: ["delete"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
@@ -1336,5 +1360,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
+  "/settings/github-apps": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

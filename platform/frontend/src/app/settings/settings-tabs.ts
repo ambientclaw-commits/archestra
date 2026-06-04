@@ -33,6 +33,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles" }]
       : []),
+    ...(permissionMap?.["/settings/github-apps"]
+      ? [{ label: "GitHub Apps", href: "/settings/github-apps" }]
+      : []),
     ...(config.enterpriseFeatures.core &&
     permissionMap?.["/settings/identity-providers"]
       ? [{ label: "Identity Providers", href: "/settings/identity-providers" }]

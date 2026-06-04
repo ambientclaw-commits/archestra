@@ -25,6 +25,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Configure default agent behavior and agent-related platform settings.",
   },
+  "/settings/github-apps": {
+    title: "GitHub Apps",
+    description:
+      "Manage organization GitHub App credentials for connectors and skill imports.",
+  },
   "/settings/identity-providers": {
     title: "Identity Providers",
     description:

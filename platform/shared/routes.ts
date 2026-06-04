@@ -399,6 +399,13 @@ export const RouteId = {
   UpdateNetworkPolicy: "updateNetworkPolicy",
   DeleteNetworkPolicy: "deleteNetworkPolicy",
 
+  // GitHub App Configuration Routes
+  ListGithubAppConfigs: "listGithubAppConfigs",
+  CreateGithubAppConfig: "createGithubAppConfig",
+  GetGithubAppConfig: "getGithubAppConfig",
+  UpdateGithubAppConfig: "updateGithubAppConfig",
+  DeleteGithubAppConfig: "deleteGithubAppConfig",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
