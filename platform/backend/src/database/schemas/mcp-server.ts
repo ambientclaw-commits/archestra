@@ -67,6 +67,16 @@ const mcpServerTable = pgTable(
       .notNull()
       .default("personal"),
     reinstallRequired: boolean("reinstall_required").notNull().default(false),
+    /**
+     * The K8s namespace this install's Deployment currently runs in, recorded
+     * at deploy time. Teardown/relocation reads this to delete the pod where it
+     * ACTUALLY is — instead of re-deriving the namespace from the catalog's
+     * (possibly already-updated) environment, which orphans the pod when the
+     * runtime's in-memory deployment cache is cold or stale (multi-replica).
+     * Null for never-deployed or legacy rows; callers fall back to resolving
+     * from the catalog's environment.
+     */
+    k8sNamespace: text("k8s_namespace"),
     localInstallationStatus: text("local_installation_status")
       .notNull()
       .default("idle")

@@ -79,6 +79,11 @@ const mockCreateDockerRegistrySecrets = vi.fn().mockResolvedValue([]);
 const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
 const mockResolveHttpEndpoint = vi.fn().mockResolvedValue(undefined);
 const mockWaitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
+const mockStopDeployment = vi.fn().mockResolvedValue(undefined);
+const mockDeleteK8sService = vi.fn().mockResolvedValue(undefined);
+const mockDeleteK8sSecret = vi.fn().mockResolvedValue(undefined);
+const mockDeleteDockerRegistrySecrets = vi.fn().mockResolvedValue(undefined);
+const mockRemoveDeployment = vi.fn().mockResolvedValue(undefined);
 const mockK8sDeploymentInstances: Array<{
   options: Record<string, unknown>;
   createK8sSecret: ReturnType<typeof vi.fn>;
@@ -94,6 +99,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {
     findById: vi.fn().mockResolvedValue(null),
     findByCatalogId: vi.fn().mockResolvedValue([]),
+    update: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -138,6 +144,11 @@ vi.mock("./k8s-deployment", () => {
       deleteK8sNetworkPolicy: ReturnType<typeof vi.fn>;
       resolveHttpEndpoint: ReturnType<typeof vi.fn>;
       waitForDeploymentReady: ReturnType<typeof vi.fn>;
+      stopDeployment: ReturnType<typeof vi.fn>;
+      deleteK8sService: ReturnType<typeof vi.fn>;
+      deleteK8sSecret: ReturnType<typeof vi.fn>;
+      deleteDockerRegistrySecrets: ReturnType<typeof vi.fn>;
+      removeDeployment: ReturnType<typeof vi.fn>;
 
       constructor(options: Record<string, unknown>) {
         this.options = options;
@@ -147,10 +158,18 @@ vi.mock("./k8s-deployment", () => {
         this.deleteK8sNetworkPolicy = mockDeleteK8sNetworkPolicy;
         this.resolveHttpEndpoint = mockResolveHttpEndpoint;
         this.waitForDeploymentReady = mockWaitForDeploymentReady;
+        this.stopDeployment = mockStopDeployment;
+        this.deleteK8sService = mockDeleteK8sService;
+        this.deleteK8sSecret = mockDeleteK8sSecret;
+        this.deleteDockerRegistrySecrets = mockDeleteDockerRegistrySecrets;
+        this.removeDeployment = mockRemoveDeployment;
         mockK8sDeploymentInstances.push({
           options,
           createK8sSecret: this.createK8sSecret,
         });
+      }
+      get k8sNamespace(): string {
+        return String(this.options.namespace ?? "");
       }
       static sanitizeLabelValue(value: string): string {
         return value;
@@ -690,6 +709,98 @@ describe("McpServerRuntimeManager", () => {
     });
   });
 
+  describe("stopServer - relocation/reinstall orphan (residual edge)", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+    });
+
+    // Residual orphan after #5266: a single-tenant server is deployed in its OLD
+    // (Prod) namespace, then a COMBINED env+new-input edit moves the catalog to
+    // Default WITHOUT recreating (manual reinstall pending — #5266 deliberately
+    // skips the teardown so the pod isn't deleted with nothing to replace it).
+    // When the user later reinstalls, the teardown (stopServer) runs on a
+    // cache-cold replica and must delete the pod where it ACTUALLY runs (the
+    // persisted old namespace) — NOT the namespace re-derived from the now-
+    // Default catalog row. Currently it re-derives, leaving the old pod orphaned.
+    test("cold-cache teardown after a deferred env change targets the deployment's actual namespace, not the re-derived one", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      const ACTUAL_OLD_NAMESPACE = "prod-env-namespace";
+      // The install records where its pod ACTUALLY runs (the old Prod namespace).
+      const server = {
+        id: "deferred-server",
+        name: "deferred-server",
+        catalogId: "deferred-catalog",
+        k8sNamespace: ACTUAL_OLD_NAMESPACE,
+      } as unknown as Awaited<ReturnType<typeof McpServerModel.findById>>;
+      // Catalog now points at Default (environmentId null → the manager's own
+      // namespace) — single-tenant, pod not yet relocated.
+      const catalog = {
+        id: "deferred-catalog",
+        serverType: "local",
+        multitenant: false,
+        environmentId: null,
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >;
+      // stopServer looks these up twice (getOrLoadDeployment + sibling guard).
+      vi.mocked(McpServerModel.findById)
+        .mockResolvedValueOnce(server)
+        .mockResolvedValueOnce(server);
+      vi.mocked(InternalMcpCatalogModel.findById)
+        .mockResolvedValueOnce(catalog)
+        .mockResolvedValueOnce(catalog);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      // Cold cache: the in-memory map is empty (a replica that didn't create
+      // the pod), so getOrLoadDeployment rebuilds from the DB row.
+      await manager.stopServer("deferred-server");
+
+      // The deployment the teardown acted on must be in the pod's ACTUAL
+      // namespace. Today getOrLoadDeployment re-derives the new (Default)
+      // namespace from the catalog row, so this fails — capturing the orphan.
+      const tornDownNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+      expect(tornDownNamespace).toBe(ACTUAL_OLD_NAMESPACE);
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+  });
+
   describe("stopServer - multi-tenant teardown guard", () => {
     // Sibling-aware short-circuit from PR #4288.
 
@@ -1154,6 +1265,29 @@ describe("McpServerRuntimeManager", () => {
       // createK8sSecret should only receive SLACK_TOKEN, not GITHUB_TOKEN or JIRA_API_KEY
       expect(mockCreateK8sSecret).toHaveBeenCalledWith({
         SLACK_TOKEN: "xoxb-slack-token",
+      });
+
+      cleanup();
+    });
+
+    test("persists the deployed namespace on the mcp_server row after a successful start", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+      });
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      vi.mocked(McpServerModel.update).mockClear();
+
+      await manager.startServer(mcpServer);
+
+      // The namespace the deployment was actually created in is written back to
+      // the row, so a later teardown/relocation deletes the pod there regardless
+      // of cache state or a subsequent environment change.
+      const deployedNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+      expect(deployedNamespace).toBeTruthy();
+      expect(McpServerModel.update).toHaveBeenCalledWith(mcpServer.id, {
+        k8sNamespace: deployedNamespace,
       });
 
       cleanup();

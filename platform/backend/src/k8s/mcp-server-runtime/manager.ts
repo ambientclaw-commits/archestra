@@ -567,6 +567,16 @@ export class McpServerRuntimeManager {
 
       await k8sDeployment.startOrCreateDeployment(resolvedImagePullSecretNames);
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
+
+      // Record where the pod actually runs. A later teardown/relocation reads
+      // this so it deletes the pod in THIS namespace even after the catalog's
+      // environment changes and the in-memory cache is cold/stale on whichever
+      // replica handles the teardown.
+      if (mcpServer.k8sNamespace !== k8sDeployment.k8sNamespace) {
+        await McpServerModel.update(id, {
+          k8sNamespace: k8sDeployment.k8sNamespace,
+        });
+      }
     } catch (error) {
       logger.error(
         { err: error },
@@ -706,6 +716,13 @@ export class McpServerRuntimeManager {
       // Create the K8sDeployment object and register it
       // Note: We don't call startOrCreateDeployment() because the deployment
       // should already exist in K8s (created by another replica)
+      //
+      // Namespace precedence: an explicit override (relocation teardown) wins;
+      // otherwise the namespace the pod was actually deployed into, persisted on
+      // the row (`mcpServer.k8sNamespace`) — this is what makes a cache-cold or
+      // cache-stale load target the pod's REAL namespace rather than re-deriving
+      // a possibly-changed environment and orphaning it; finally, for
+      // never-deployed/legacy rows, resolve from the catalog's environment.
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
@@ -716,6 +733,7 @@ export class McpServerRuntimeManager {
         k8sLog: this.k8sLog,
         namespace:
           namespaceOverride ??
+          mcpServer.k8sNamespace ??
           (await this.resolveNamespaceForCatalog(catalogItem)),
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
@@ -893,6 +911,17 @@ export class McpServerRuntimeManager {
     const newDeployment = await this.getOrLoadDeployment(representative.id);
     if (newDeployment) {
       await newDeployment.waitForDeploymentReady(60, 2000);
+      // Every install aliases this one shared Deployment, but only the
+      // representative's row was updated by startServer above. Record the new
+      // namespace on every sibling so a later teardown via any install (on a
+      // cache-cold replica) targets the right namespace instead of a stale one.
+      for (const install of installs) {
+        if (install.k8sNamespace !== newDeployment.k8sNamespace) {
+          await McpServerModel.update(install.id, {
+            k8sNamespace: newDeployment.k8sNamespace,
+          });
+        }
+      }
     }
 
     logger.info(
