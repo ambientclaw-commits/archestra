@@ -38,7 +38,6 @@ export const resources = [
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "environment",
-  "networkPolicy",
   "githubAppConfig",
   "chat",
   "llmCost",
@@ -101,7 +100,6 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   environment: "Environments",
-  networkPolicy: "Network Policies",
   githubAppConfig: "GitHub App Configurations",
   team: "Teams",
   ac: "Roles",
@@ -153,7 +151,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
-  networkPolicy: "Reusable network egress policies for deployment environments",
   githubAppConfig:
     "GitHub App credentials for authenticating skill imports and knowledge connectors",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
@@ -202,7 +199,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
     "environment",
-    "networkPolicy",
   ],
   LLM: [
     "llmProxy",

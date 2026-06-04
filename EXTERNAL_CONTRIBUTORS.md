@@ -537,3 +537,9 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Adam-cyber-sys
 - @creador777
 - @adarshtiwari908
+- @Aniketsy
+- @jose-rdgz
+- @Lu1989-bit
+- @ozantaybas
+- @839194950
+- @Ashlok2003

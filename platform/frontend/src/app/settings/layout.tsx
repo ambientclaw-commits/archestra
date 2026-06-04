@@ -30,6 +30,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Manage organization GitHub App credentials for connectors and skill imports.",
   },
+  "/settings/environments": {
+    title: "Environments",
+    description:
+      "Manage deployment environments, namespaces, access, and network egress.",
+  },
   "/settings/identity-providers": {
     title: "Identity Providers",
     description:

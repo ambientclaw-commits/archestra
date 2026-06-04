@@ -103,7 +103,6 @@ const ToolWithAssignedAgentCountSchema = z.object({
     }),
   ),
 });
-
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/internal_mcp_catalog",
@@ -173,6 +172,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // Secret FK columns are server-managed: clients submit secret values, never
+      // ids. Trusting an inbound id would let a caller point the row at another
+      // org's secret (which create()'s clone-secret merge would then read/write).
+      restBody.clientSecretId = undefined;
+      restBody.localConfigSecretId = undefined;
+      restBody.presetSecretId = undefined;
 
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
@@ -551,6 +557,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // Secret FK columns are server-managed (see POST): a client-supplied id
+      // would otherwise be persisted onto the row, repointing it at another
+      // org's secret. Secret handling below sets them from the existing row.
+      restBody.clientSecretId = undefined;
+      restBody.localConfigSecretId = undefined;
+      restBody.presetSecretId = undefined;
 
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
@@ -1181,6 +1194,79 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         throw new ApiError(500, errorMessage);
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/refresh-image",
+    {
+      schema: {
+        operationId: RouteId.RefreshInternalMcpCatalogImage,
+        description:
+          "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image. Fan-out restarts are best effort: the request succeeds when at least one target restarts successfully, while failed installs are marked with their own error status.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+        expandSecrets: false,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        !isAdmin &&
+        (catalogItem.scope !== "personal" ||
+          catalogItem.authorId !== request.user.id)
+      ) {
+        throw new ApiError(
+          403,
+          "Only catalog editors can restart this catalog's pods",
+        );
+      }
+
+      const children =
+        catalogItem.parentCatalogItemId === null
+          ? await InternalMcpCatalogModel.findChildren(id)
+          : [];
+      const targetCatalogItems = [catalogItem, ...children].filter(
+        (item) => item.serverType === "local",
+      );
+
+      if (targetCatalogItems.length === 0) {
+        throw new ApiError(
+          400,
+          "Pod restart is only supported for local catalogs",
+        );
+      }
+
+      const restartResults = await Promise.allSettled(
+        targetCatalogItems.map(refreshCatalogImage),
+      );
+      const failures = restartResults.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failures.length === restartResults.length) {
+        throw new ApiError(500, getSettledErrorMessage(failures[0]));
       }
 
       return reply.send({ success: true });
@@ -2267,6 +2353,58 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
+  if (catalogItem.multitenant === true) {
+    await reinstallMultitenantCatalog(catalogItem);
+    return;
+  }
+
+  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+  const restartResults = await Promise.allSettled(
+    installs.map(async (server) => {
+      await McpServerModel.update(server.id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(server.id, "pending", null);
+
+      try {
+        await autoReinstallServer(server, catalogItem);
+        await McpServerModel.update(server.id, {
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(server.id, "success", null);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          { err: error, serverId: server.id, catalogId: catalogItem.id },
+          "Pod restart failed for MCP server install",
+        );
+        await McpServerModel.update(server.id, {
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(server.id, "error", errorMessage);
+        throw error;
+      }
+    }),
+  );
+  const failures = restartResults.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failures.length > 0 && failures.length === restartResults.length) {
+    throw new Error(getSettledErrorMessage(failures[0]));
+  }
+}
+
+function getSettledErrorMessage(result: PromiseRejectedResult): string {
+  return result.reason instanceof Error
+    ? result.reason.message
+    : "Unknown error";
 }
 
 /**
