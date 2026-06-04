@@ -4,6 +4,12 @@ archestra:
   worker:
     replicaCount: 3
 
+  codeRuntime:
+    enabled: true
+    dagger:
+      managed:
+        enabled: true
+
   # Pod Disruption Budget: ensure at least 3 of 4 pods stay running during
   # voluntary disruptions (node upgrades, autoscaling, maintenance)
   podDisruptionBudget:
@@ -22,7 +28,6 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
-    ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED: "true"
     ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
@@ -35,7 +40,7 @@ archestra:
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
-    ARCHESTRA_TRUST_PROXY: "true"
+    ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"
@@ -56,6 +61,13 @@ archestra:
       networkPolicy:
         # Enable SSRF protection for MCP server pods
         create: true
+
+      rbac:
+        # Namespaces backing deployment environments the platform may deploy
+        # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
+        # and is surfaced to the app as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES.
+        environmentNamespaces:
+          - env-test
 
       serviceAccount:
         # GKE Workload Identity binding to allow Vertex AI access via ADC

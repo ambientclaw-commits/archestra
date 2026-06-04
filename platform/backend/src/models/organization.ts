@@ -3,7 +3,11 @@ import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { AppearanceSettings, Organization } from "@/types";
+import type {
+  AppearanceSettings,
+  Organization,
+  OrganizationAnalyticsState,
+} from "@/types";
 
 class OrganizationModel {
   /**
@@ -60,6 +64,66 @@ class OrganizationModel {
   }
 
   /**
+   * Get persistent analytics identity and event timestamps for this installation.
+   */
+  static async getAnalyticsState(): Promise<OrganizationAnalyticsState> {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    const [state] = await db
+      .select({
+        id: schema.organizationsTable.id,
+        analyticsInstanceId: schema.organizationsTable.analyticsInstanceId,
+        analyticsInstanceStartedAt:
+          schema.organizationsTable.analyticsInstanceStartedAt,
+        analyticsInstanceLastHeartbeatAt:
+          schema.organizationsTable.analyticsInstanceLastHeartbeatAt,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organization.id))
+      .limit(1);
+
+    if (!state) {
+      throw new Error("Organization analytics state not found");
+    }
+    return state;
+  }
+
+  /**
+   * Update installation analytics timestamps after successful event capture.
+   */
+  static async updateAnalyticsState({
+    id,
+    analyticsInstanceStartedAt,
+    analyticsInstanceLastHeartbeatAt,
+  }: {
+    id: string;
+    analyticsInstanceStartedAt?: Date;
+    analyticsInstanceLastHeartbeatAt?: Date;
+  }): Promise<void> {
+    const values: Partial<
+      Pick<
+        OrganizationAnalyticsState,
+        "analyticsInstanceStartedAt" | "analyticsInstanceLastHeartbeatAt"
+      >
+    > = {};
+
+    if (analyticsInstanceStartedAt) {
+      values.analyticsInstanceStartedAt = analyticsInstanceStartedAt;
+    }
+    if (analyticsInstanceLastHeartbeatAt) {
+      values.analyticsInstanceLastHeartbeatAt =
+        analyticsInstanceLastHeartbeatAt;
+    }
+
+    if (Object.keys(values).length === 0) return;
+
+    await db
+      .update(schema.organizationsTable)
+      .set(values)
+      .where(eq(schema.organizationsTable.id, id));
+  }
+
+  /**
    * Update an organization with partial data
    */
   static async patch(
@@ -88,6 +152,18 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     return updatedOrganization || null;
+  }
+
+  /**
+   * List ids of organizations that have opted into the Agent Skill tools
+   * (`skillToolsEnabled`). Used to backfill newly introduced skill tools.
+   */
+  static async findIdsWithSkillToolsEnabled(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.skillToolsEnabled, true));
+    return rows.map((row) => row.id);
   }
 
   /**
@@ -186,6 +262,59 @@ class OrganizationModel {
     }
 
     return organization;
+  }
+
+  /**
+   * Compact org-wide snapshot for audit logs (large/binary branding fields omitted).
+   */
+  // `id` here is always the caller's own organizationId: all registry entries
+  // for this fetcher use resourceIdSource="organizationContext", so id equals
+  // organizationId at call time. The second parameter is unused by design —
+  // the resource being audited IS the organization.
+  static async findByIdForAudit(
+    id: string,
+    _organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const org = await OrganizationModel.getById(id);
+    if (!org) return null;
+
+    const media = (v: string | null | undefined) =>
+      v && v.length > 0 ? "(set)" : null;
+
+    return {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      theme: org.theme,
+      customFont: org.customFont,
+      logo: media(org.logo),
+      logoDark: media(org.logoDark),
+      favicon: media(org.favicon),
+      iconLogo: media(org.iconLogo),
+      appName: org.appName ?? null,
+      ogDescription: org.ogDescription ?? null,
+      footerText: org.footerText ?? null,
+      defaultUserLimitCleanupInterval:
+        org.defaultUserLimitCleanupInterval ?? null,
+      onboardingComplete: org.onboardingComplete,
+      globalToolPolicy: org.globalToolPolicy,
+      compressionScope: org.compressionScope,
+      convertToolResultsToToon: org.convertToolResultsToToon,
+      allowChatFileUploads: org.allowChatFileUploads,
+      embeddingModel: org.embeddingModel ?? null,
+      defaultLlmModel: org.defaultLlmModel ?? null,
+      defaultLlmProvider: org.defaultLlmProvider ?? null,
+      defaultAgentId: org.defaultAgentId ?? null,
+      rerankerModel: org.rerankerModel ?? null,
+      showTwoFactor: org.showTwoFactor,
+      slimChatErrorUi: org.slimChatErrorUi,
+      oauthAccessTokenLifetimeSeconds: org.oauthAccessTokenLifetimeSeconds,
+      connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
+      connectionDefaultLlmProxyId: org.connectionDefaultLlmProxyId ?? null,
+      connectionDefaultClientId: org.connectionDefaultClientId ?? null,
+      metadata: org.metadata ?? null,
+      createdAt: org.createdAt.toISOString(),
+    };
   }
 }
 export default OrganizationModel;

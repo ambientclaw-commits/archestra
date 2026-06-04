@@ -4,6 +4,12 @@ import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentDialog } from "./agent-dialog";
 
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
+
 const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
@@ -346,6 +352,7 @@ const baseAgent = {
   authorName: "Test User",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  deletedAt: null,
   knowledgeBaseIds: [],
   connectorIds: [],
   suggestedPrompts: [],
@@ -356,7 +363,6 @@ const baseAgent = {
   identityProviderId: null,
   builtInAgentConfig: null,
   passthroughHeaders: null,
-  toolAssignmentMode: "manual" as const,
   incomingEmailEnabled: false,
   incomingEmailSecurityMode: "public" as const,
   incomingEmailAllowedDomain: null,
@@ -463,6 +469,7 @@ describe.skip("AgentDialog", () => {
           tools: [],
           labels: [],
           authorId: "user-1",
+          deletedAt: null,
           authorName: "Test User",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -476,7 +483,6 @@ describe.skip("AgentDialog", () => {
           identityProviderId: null,
           builtInAgentConfig: null,
           passthroughHeaders: null,
-          toolAssignmentMode: "manual",
           incomingEmailEnabled: false,
           incomingEmailSecurityMode: "public",
           incomingEmailAllowedDomain: null,

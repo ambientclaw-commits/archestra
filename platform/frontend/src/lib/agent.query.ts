@@ -12,6 +12,8 @@ import { handleApiError } from "@/lib/utils";
 const {
   createAgent,
   cloneAgent,
+  convertAgentToSkill,
+  suggestSkillDescription,
   deleteAgent,
   exportAgent,
   getAgents,
@@ -20,6 +22,7 @@ const {
   getDefaultLlmProxy,
   getAgent,
   importAgent,
+  restoreAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
@@ -84,6 +87,57 @@ export function useCloneAgent() {
   });
 }
 
+type ConvertAgentToSkillArgs = {
+  id: string;
+} & archestraApiTypes.ConvertAgentToSkillData["body"];
+
+export function useConvertAgentToSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: ConvertAgentToSkillArgs) => {
+      const { data, error } = await convertAgentToSkill({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // the source agent may have been deleted, so refresh the agents list too.
+      if (data.deletedAgent) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+      }
+      toast.success(
+        data.deletedAgent
+          ? `Created skill "${data.skill.name}" and removed the agent`
+          : `Created skill "${data.skill.name}" from agent`,
+      );
+    },
+  });
+}
+
+/**
+ * Suggests a skill description for an agent (LLM-generated) for the
+ * convert-to-skill dialog. Read-only: it neither creates a skill nor mutates
+ * the agent, so it invalidates nothing — the caller fills the form field.
+ */
+export function useSuggestSkillDescription() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await suggestSkillDescription({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.description ?? null;
+    },
+  });
+}
+
 // Paginated hook for the agents page
 export function useProfilesPaginated(
   params?: archestraApiTypes.GetAgentsData["query"] & {
@@ -104,6 +158,7 @@ export function useProfilesPaginated(
     excludeAuthorIds,
     excludeOtherPersonalAgents,
     labels,
+    status,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -121,6 +176,7 @@ export function useProfilesPaginated(
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === undefined &&
     labels === undefined &&
+    status === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
@@ -139,6 +195,7 @@ export function useProfilesPaginated(
         excludeAuthorIds,
         excludeOtherPersonalAgents,
         labels,
+        status,
       },
     ],
     queryFn: async () =>
@@ -157,6 +214,7 @@ export function useProfilesPaginated(
             excludeAuthorIds,
             excludeOtherPersonalAgents,
             labels,
+            status,
           },
         })
       ).data ?? null,
@@ -284,6 +342,25 @@ export function useDeleteProfile() {
   });
 }
 
+export function useRestoreProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.setQueryData(["agents", data.id], data);
+    },
+  });
+}
+
 export function useLabelKeys() {
   return useQuery({
     queryKey: ["agents", "labels", "keys"],
@@ -319,6 +396,7 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
     queryKey: internalAgentsQueryKey,
     queryFn: fetchInternalAgents,
     enabled: params?.enabled,
+    staleTime: 0,
   });
 }
 

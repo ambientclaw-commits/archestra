@@ -43,14 +43,6 @@ export type AgentScope = ResourceVisibilityScope;
 export const ToolExposureModeSchema = z.enum(["full", "search_and_run_only"]);
 export type ToolExposureMode = z.infer<typeof ToolExposureModeSchema>;
 
-/**
- * Tool assignment mode:
- * - automatic: Tools are automatically assigned based label selectors
- * - manual: Tools must be manually assigned by the user
- */
-export const ToolAssignmentModeSchema = z.enum(["automatic", "manual"]);
-export type ToolAssignmentMode = z.infer<typeof ToolAssignmentModeSchema>;
-
 export const AgentScopeFilterSchema = z.enum([
   "personal",
   "team",
@@ -79,12 +71,17 @@ const ContextCompactionAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
 });
 
+const ChatTitleGenerationAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
+  ChatTitleGenerationAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -99,6 +96,9 @@ export type DualLlmQuarantineAgentConfig = z.infer<
 >;
 export type ContextCompactionAgentConfig = z.infer<
   typeof ContextCompactionAgentConfigSchema
+>;
+export type ChatTitleGenerationAgentConfig = z.infer<
+  typeof ChatTitleGenerationAgentConfigSchema
 >;
 
 // Team info schema for agent responses (just id and name)
@@ -133,7 +133,6 @@ const selectExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
-  toolAssignmentMode: ToolAssignmentModeSchema,
   toolExposureMode: ToolExposureModeSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
@@ -143,7 +142,6 @@ const insertExtendedFields = {
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema.optional(),
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
-  toolAssignmentMode: ToolAssignmentModeSchema.optional(),
   toolExposureMode: ToolExposureModeSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
@@ -207,6 +205,7 @@ export const SelectAgentSchema = createSelectSchema(
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
+  authorEmail: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
   connectorIds: z.array(z.string()),
   suggestedPrompts: z

@@ -134,7 +134,25 @@ vi.mock("@/components/chat/tool-error-logs-button", () => ({
 }));
 
 vi.mock("@/components/chat/tool-status-row", () => ({
-  ToolStatusRow: () => null,
+  ToolStatusRow: ({
+    title,
+    description,
+    actions = [],
+  }: {
+    title: string;
+    description?: string;
+    actions?: Array<{ label: string; onClick: () => void }>;
+  }) => (
+    <div>
+      <div>{title}</div>
+      {description ? <div>{description}</div> : null}
+      {actions.map((action) => (
+        <button key={action.label} type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/chat/knowledge-graph-citations", () => ({
@@ -153,6 +171,13 @@ vi.mock("@/lib/chat/chat.query", () => ({
 vi.mock("@/lib/chat/chat-message.query", () => ({
   useUpdateChatMessage: () => ({
     mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
+  usePromoteChatAttachmentToKnowledgeFile: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
   }),
 }));
 
@@ -391,6 +416,43 @@ describe("ChatMessages", () => {
     expect(error.compareDocumentPosition(retry)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it("renders unavailable tool failures as tool rows without global chat errors", () => {
+    const unavailableToolError =
+      'The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.\n\nDetails:\n{"requestedToolName":"missing_tool"}';
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "missing_tool",
+            toolCallId: "call-1",
+            state: "output-error",
+            input: {},
+            errorText: unavailableToolError,
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.queryByTestId("inline-chat-error")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button")[0]);
+    expect(screen.getByText("tool-missing_tool")).toBeInTheDocument();
+    expect(
+      screen.getByText(/The requested tool is not available in this chat/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/requestedToolName/)).toBeInTheDocument();
   });
 
   it("does not render persisted chat errors before live messages without timestamps", () => {
@@ -777,6 +839,61 @@ describe("ChatMessages", () => {
     expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
 
+  it("renders the sensitive-context divider only once across multiple turns calling the same tool", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id-1",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = first-value" },
+          },
+          {
+            type: "text",
+            text: "First result processed.",
+          },
+        ],
+      },
+      {
+        id: "assistant-sensitive-repeat",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id-2",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = second-value" },
+          },
+          {
+            type: "text",
+            text: "Second result processed.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {
@@ -886,6 +1003,127 @@ describe("ChatMessages", () => {
     expect(
       screen.queryByText("tool-sparky__todo_write"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders approval controls for a direct tool call that requires approval", () => {
+    const onToolApprovalResponse = vi.fn();
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-workspace__export_records",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: { destination: "external" },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={onToolApprovalResponse}
+      />,
+    );
+
+    expect(screen.getByText("Approval required")).toBeInTheDocument();
+    expect(
+      screen.getByText("Review this tool call before it can continue."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval-1",
+      approved: true,
+    });
+  });
+
+  it("renders approval controls for run_tool when its target requires approval", () => {
+    const onToolApprovalResponse = vi.fn();
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-sparky__run_tool",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: {
+              tool_name: "workspace__export_records",
+              tool_args: { destination: "external" },
+            },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={onToolApprovalResponse}
+      />,
+    );
+
+    expect(screen.getByText("Approval required")).toBeInTheDocument();
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("tool-sparky__run_tool")).not.toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
+    expect(screen.queryByText(/tool_name/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval-1",
+      approved: false,
+      reason: "User denied",
+    });
+  });
+
+  it("renders target approval details for a branded run_tool before identity data resolves", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-custom__run_tool",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: {
+              tool_name: "workspace__export_records",
+              tool_args: { destination: "external" },
+            },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("tool-custom__run_tool")).not.toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
   });
 
   it("renders assistant expired-auth text as the inline reauth tool UI", () => {

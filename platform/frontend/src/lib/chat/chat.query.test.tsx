@@ -72,6 +72,7 @@ describe("mergeUpdatedConversationIntoCache", () => {
         name: "Agent B",
         systemPrompt: null,
         agentType: "agent",
+        toolExposureMode: "full",
         llmApiKeyId: "key-anthropic",
       },
       modelId: "model-claude",
@@ -130,6 +131,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     todoList: null,
     artifact: null,
     pinnedAt: null,
+    lastMessageAt: "2026-03-17T00:00:00.000Z",
     createdAt: "2026-03-17T00:00:00.000Z",
     updatedAt: "2026-03-17T00:00:00.000Z",
     agent: {
@@ -137,6 +139,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
       name: "Agent A",
       systemPrompt: null,
       agentType: "agent",
+      toolExposureMode: "full",
       llmApiKeyId: "key-openai",
     },
     share: null,

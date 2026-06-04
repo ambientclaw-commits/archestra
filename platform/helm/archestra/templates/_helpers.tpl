@@ -52,6 +52,19 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Maintenance mode can serve the frontend overlay and public config without
+database access. The chart can only detect this when the env var is set
+directly through archestra.env.
+*/}}
+{{- define "archestra-platform.maintenanceModeEnabled" -}}
+{{- if and (hasKey .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE") (ne (toString (get .Values.archestra.env "ARCHESTRA_MAINTENANCE_MODE_MESSAGE")) "") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end }}
+
+{{/*
 Environment variables for the Archestra Platform container
 */}}
 {{- define "archestra-platform.env" -}}
@@ -124,6 +137,32 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
+{{- if .Values.archestra.codeRuntime.enabled }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
+- name: ARCHESTRA_CODE_RUNTIME_ENABLED
+  value: "true"
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST") }}
+- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS") }}
+- name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
+  value: {{ .Values.archestra.codeRuntime.timeoutSeconds | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
+  value: {{ .Values.archestra.codeRuntime.maxConcurrent | quote }}
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES") }}
+- name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
+  value: {{ .Values.archestra.codeRuntime.maxOutputBytes | quote }}
+{{- end }}
+{{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
   value: "/var/diagnostics"
@@ -163,6 +202,52 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 {{- end }}
 
 {{/*
+dagger runner host for the code execution runtime.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRunnerHost" -}}
+{{- $runnerHost := .Values.archestra.codeRuntime.dagger.runnerHost -}}
+{{- if $runnerHost -}}
+{{- $runnerHost -}}
+{{- else -}}
+{{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
+{{- $namespace := include "archestra-platform.codeRuntimeDaggerPodNamespace" . -}}
+{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($namespace | urlquery) ($pod.container | urlquery) -}}
+{{- with $pod.context -}}
+{{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
+{{- end -}}
+{{- $runnerHost -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace containing the Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerPodNamespace" -}}
+{{- $namespace := .Values.archestra.codeRuntime.dagger.pod.namespace -}}
+{{- if $namespace -}}
+{{- $namespace -}}
+{{- else if .Values.archestra.codeRuntime.dagger.managed.enabled -}}
+{{- .Release.Namespace -}}
+{{- else -}}
+dagger
+{{- end -}}
+{{- end }}
+
+{{/*
+namespace where the code-runtime kube-pod RBAC should be created.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
+{{- default (include "archestra-platform.codeRuntimeDaggerPodNamespace" .) .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
+{{- end }}
+
+{{/*
+service account name for the managed Dagger Engine pod.
+*/}}
+{{- define "archestra-platform.codeRuntimeDaggerServiceAccountName" -}}
+{{- default "dagger-runtime" .Values.dagger.engine.existingServiceAccount.name -}}
+{{- end }}
+
+{{/*
 Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}
@@ -195,6 +280,52 @@ ServiceAccount name for the Archestra Platform
 {{- else }}
 {{- default "default" .Values.archestra.orchestrator.kubernetes.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+RBAC rules granting the platform ServiceAccount the permissions it needs to
+manage MCP server workloads in a namespace. Shared by the release-namespace Role
+and the per-namespace Roles generated from rbac.environmentNamespaces, so both
+grant exactly the same access (no drift).
+*/}}
+{{- define "archestra-platform.mcpManagerRules" -}}
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# CiliumNetworkPolicy for DNS/FQDN egress rules on Cilium-enabled clusters.
+- apiGroups: ["cilium.io"]
+  resources: ["ciliumnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# GKE FQDNNetworkPolicy for DNS/FQDN egress rules on supported GKE clusters.
+- apiGroups: ["networking.gke.io"]
+  resources: ["fqdnnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# EKS Auto Mode ApplicationNetworkPolicy for DNS/FQDN egress rules.
+- apiGroups: ["networking.k8s.aws"]
+  resources: ["applicationnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 {{- end }}
 
 {{/*

@@ -18,7 +18,7 @@ export function makeConfig(
     },
     features: {
       orchestratorK8sRuntime: false,
-      advancedToolFeaturesEnabled: false,
+      codeRuntime: false,
       agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
@@ -29,11 +29,14 @@ export function makeConfig(
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",
+      environmentNamespaces: [],
       isQuickstart: false,
       ngrokDomain: "",
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
+      chatSecretScanEnabled: true,
       ...overrides.features,
+      maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
     providerBaseUrls: overrides.providerBaseUrls ?? {},
   };
@@ -51,9 +54,11 @@ export function makePublicConfig(
     disableInvitations: false,
     analytics: {
       enabled: false,
+      instanceId: null,
       posthog: { key: "", host: "" },
     },
     ...overrides,
+    maintenanceMode: overrides.maintenanceMode ?? null,
   };
 }
 

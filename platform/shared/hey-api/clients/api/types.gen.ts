@@ -10763,6 +10763,10 @@ export type GetAgentsData = {
          * Hide personal agents owned by other users. Admin-only; no-op for non-admins.
          */
         excludeOtherPersonalAgents?: boolean;
+        /**
+         * Filter by lifecycle status. Deleted rows require delete permission.
+         */
+        status?: 'active' | 'deleted';
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team';
@@ -10864,7 +10868,6 @@ export type GetAgentsResponses = {
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
-            toolAssignmentMode: 'automatic' | 'manual';
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -10875,10 +10878,13 @@ export type GetAgentsResponses = {
                 name: 'dual-llm-quarantine-agent';
             } | {
                 name: 'context-compaction-subagent';
+            } | {
+                name: 'chat-title-generation-subagent';
             } | null;
             builtIn: boolean | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             tools: Array<{
                 id: string;
                 agentId: string | null;
@@ -10904,6 +10910,7 @@ export type GetAgentsResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -10922,6 +10929,7 @@ export type GetAgentsResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -10962,7 +10970,6 @@ export type CreateAgentData = {
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
-        toolAssignmentMode?: 'automatic' | 'manual';
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -10973,7 +10980,10 @@ export type CreateAgentData = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
+        deletedAt?: unknown;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -11085,7 +11095,6 @@ export type CreateAgentResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11096,10 +11105,13 @@ export type CreateAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -11125,6 +11137,7 @@ export type CreateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11143,6 +11156,7 @@ export type CreateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11178,6 +11192,10 @@ export type GetAllAgentsData = {
          * Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).
          */
         excludeOtherPersonalAgents?: boolean;
+        /**
+         * Filter by lifecycle status. Deleted rows require delete permission.
+         */
+        status?: 'active' | 'deleted';
     };
     url: '/api/agents/all';
 };
@@ -11274,7 +11292,6 @@ export type GetAllAgentsResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11285,10 +11302,13 @@ export type GetAllAgentsResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -11314,6 +11334,7 @@ export type GetAllAgentsResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11332,6 +11353,7 @@ export type GetAllAgentsResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11442,7 +11464,6 @@ export type GetDefaultMcpGatewayResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11453,10 +11474,13 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -11482,6 +11506,7 @@ export type GetDefaultMcpGatewayResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11500,6 +11525,7 @@ export type GetDefaultMcpGatewayResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11610,7 +11636,6 @@ export type GetDefaultLlmProxyResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11621,10 +11646,13 @@ export type GetDefaultLlmProxyResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -11650,6 +11678,7 @@ export type GetDefaultLlmProxyResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11668,6 +11697,7 @@ export type GetDefaultLlmProxyResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -11707,7 +11737,6 @@ export type ImportAgentData = {
              */
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
-            toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -11857,7 +11886,6 @@ export type ImportAgentResponses = {
             identityProviderId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
-            toolAssignmentMode: 'automatic' | 'manual';
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -11868,10 +11896,13 @@ export type ImportAgentResponses = {
                 name: 'dual-llm-quarantine-agent';
             } | {
                 name: 'context-compaction-subagent';
+            } | {
+                name: 'chat-title-generation-subagent';
             } | null;
             builtIn: boolean | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             tools: Array<{
                 id: string;
                 agentId: string | null;
@@ -11897,6 +11928,7 @@ export type ImportAgentResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -11915,6 +11947,7 @@ export type ImportAgentResponses = {
                 valueId?: string;
             }>;
             authorName?: string | null;
+            authorEmail?: string | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -12118,7 +12151,6 @@ export type GetAgentResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12129,10 +12161,13 @@ export type GetAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -12158,6 +12193,7 @@ export type GetAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12176,6 +12212,7 @@ export type GetAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12207,7 +12244,6 @@ export type UpdateAgentData = {
         identityProviderId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
-        toolAssignmentMode?: 'automatic' | 'manual';
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12218,7 +12254,10 @@ export type UpdateAgentData = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
+        deletedAt?: unknown;
         teams?: Array<string>;
         labels?: Array<{
             key: string;
@@ -12332,7 +12371,6 @@ export type UpdateAgentResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12343,10 +12381,13 @@ export type UpdateAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -12372,6 +12413,7 @@ export type UpdateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12390,6 +12432,7 @@ export type UpdateAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12502,7 +12545,6 @@ export type CloneAgentResponses = {
         identityProviderId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
-        toolAssignmentMode: 'automatic' | 'manual';
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12513,10 +12555,13 @@ export type CloneAgentResponses = {
             name: 'dual-llm-quarantine-agent';
         } | {
             name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
         } | null;
         builtIn: boolean | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         tools: Array<{
             id: string;
             agentId: string | null;
@@ -12542,6 +12587,7 @@ export type CloneAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12560,6 +12606,7 @@ export type CloneAgentResponses = {
             valueId?: string;
         }>;
         authorName?: string | null;
+        authorEmail?: string | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -12676,7 +12723,6 @@ export type ExportAgentResponses = {
              */
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
-            toolAssignmentMode: 'automatic' | 'manual';
             toolExposureMode: 'full' | 'search_and_run_only';
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -12731,6 +12777,180 @@ export type ExportAgentResponses = {
 };
 
 export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
+
+export type RestoreAgentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/restore';
+};
+
+export type RestoreAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreAgentError = RestoreAgentErrors[keyof RestoreAgentErrors];
+
+export type RestoreAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        slug: string | null;
+        isDefault: boolean;
+        isPersonalGateway: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        description: string | null;
+        icon: string | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
+        modelId: string | null;
+        identityProviderId: string | null;
+        passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | {
+            name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
+        } | null;
+        builtIn: boolean | null;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        authorName?: string | null;
+        authorEmail?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+    };
+};
+
+export type RestoreAgentResponse = RestoreAgentResponses[keyof RestoreAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -13774,6 +13994,7 @@ export type GetAgentToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -14817,6 +15038,160 @@ export type GetApiKeyResponses = {
 };
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
+
+export type GetAuditLogsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter events on or after this date (ISO 8601)
+         */
+        startDate?: string;
+        /**
+         * Filter events on or before this date (ISO 8601)
+         */
+        endDate?: string;
+        /**
+         * Filter by actor ID
+         */
+        actorId?: string;
+        /**
+         * Filter by action type (dotted name, e.g. agent.created)
+         */
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        /**
+         * Filter by outcome (success, failure, or denied)
+         */
+        outcome?: 'success' | 'failure' | 'denied';
+        /**
+         * Filter by actor type (user, api_key, sso, or system)
+         */
+        actorType?: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
+        /**
+         * Filter by resource type (e.g. agent, role)
+         */
+        resourceType?: string;
+        /**
+         * Case-insensitive search across actor email, actor name, HTTP path, and resource ID
+         */
+        search?: string;
+        sortDirection?: 'asc' | 'desc';
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/audit-logs';
+};
+
+export type GetAuditLogsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAuditLogsError = GetAuditLogsErrors[keyof GetAuditLogsErrors];
+
+export type GetAuditLogsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            eventSequence: number;
+            organizationId: string;
+            occurredAt: string;
+            createdAt: string;
+            actorId: string | null;
+            actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
+            actorName: string | null;
+            actorEmail: string | null;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            outcome: 'success' | 'failure' | 'denied';
+            resourceType: string | null;
+            resourceId: string | null;
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            } | null;
+            httpMethod: string | null;
+            httpPath: string | null;
+            httpRoute: string | null;
+            httpStatus: number | null;
+            requestId: string | null;
+            sourceIp: string | null;
+            userAgent: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAuditLogsResponse = GetAuditLogsResponses[keyof GetAuditLogsResponses];
 
 export type GetDefaultCredentialsStatusData = {
     body?: never;
@@ -19014,6 +19389,93 @@ export type StopChatStreamResponses = {
 
 export type StopChatStreamResponse = StopChatStreamResponses[keyof StopChatStreamResponses];
 
+export type GetActiveChatRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/active-run';
+};
+
+export type GetActiveChatRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetActiveChatRunError = GetActiveChatRunErrors[keyof GetActiveChatRunErrors];
+
+export type GetActiveChatRunResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+    /**
+     * Default Response
+     */
+    204: void;
+};
+
+export type GetActiveChatRunResponse = GetActiveChatRunResponses[keyof GetActiveChatRunResponses];
+
 export type GetChatConversationsData = {
     body?: never;
     path?: never;
@@ -19108,6 +19570,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19115,6 +19578,7 @@ export type GetChatConversationsResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19126,12 +19590,14 @@ export type GetChatConversationsResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19256,6 +19722,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19263,6 +19730,7 @@ export type CreateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19274,12 +19742,14 @@ export type CreateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19486,6 +19956,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19493,6 +19964,7 @@ export type GetChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19504,12 +19976,14 @@ export type GetChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19638,6 +20112,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19645,6 +20120,7 @@ export type UpdateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19656,12 +20132,14 @@ export type UpdateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19688,6 +20166,171 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type GetChatAttachmentContentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/attachments/{id}/content';
+};
+
+export type GetChatAttachmentContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatAttachmentContentError = GetChatAttachmentContentErrors[keyof GetChatAttachmentContentErrors];
+
+export type PromoteChatAttachmentToKnowledgeFileData = {
+    body: {
+        visibility?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/attachments/{id}/promote-to-knowledge-file';
+};
+
+export type PromoteChatAttachmentToKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PromoteChatAttachmentToKnowledgeFileError = PromoteChatAttachmentToKnowledgeFileErrors[keyof PromoteChatAttachmentToKnowledgeFileErrors];
+
+export type PromoteChatAttachmentToKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        filename: string;
+        status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
+        fileId?: string;
+    };
+};
+
+export type PromoteChatAttachmentToKnowledgeFileResponse = PromoteChatAttachmentToKnowledgeFileResponses[keyof PromoteChatAttachmentToKnowledgeFileResponses];
 
 export type ForkChatConversationData = {
     body: {
@@ -19785,6 +20428,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -19792,6 +20436,7 @@ export type ForkChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19803,12 +20448,14 @@ export type ForkChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20034,6 +20681,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             pinnedAt: string | null;
+            lastMessageAt: string;
             createdAt: string;
             updatedAt: string;
             agent: {
@@ -20041,6 +20689,7 @@ export type CompactChatConversationResponses = {
                 name: string;
                 systemPrompt: string | null;
                 agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                toolExposureMode: 'full' | 'search_and_run_only';
                 llmApiKeyId: string | null;
             } | null;
             share: {
@@ -20052,12 +20701,14 @@ export type CompactChatConversationResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -20453,6 +21104,7 @@ export type GetSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20460,6 +21112,7 @@ export type GetSharedConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20471,12 +21124,14 @@ export type GetSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20601,6 +21256,7 @@ export type ForkSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20608,6 +21264,7 @@ export type ForkSharedConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20619,12 +21276,14 @@ export type ForkSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20751,6 +21410,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20758,6 +21418,7 @@ export type GenerateChatConversationTitleResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20769,12 +21430,14 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20900,6 +21563,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -20907,6 +21571,7 @@ export type UpdateChatMessageResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20918,12 +21583,14 @@ export type UpdateChatMessageResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -22453,8 +23120,10 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        maintenanceMode: string | null;
         analytics: {
             enabled: boolean;
+            instanceId: string | null;
             posthog: {
                 key: string;
                 host: string;
@@ -22484,7 +23153,7 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
-            advancedToolFeaturesEnabled: boolean;
+            codeRuntime: boolean;
             agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
@@ -22500,10 +23169,13 @@ export type GetConfigResponses = {
             };
             mcpServerBaseImage: string;
             orchestratorK8sNamespace: string;
+            environmentNamespaces: Array<string>;
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
             mcpSandboxDomain: string | null;
+            maintenanceMode: string | null;
+            chatSecretScanEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -22696,6 +23368,410 @@ export type DeepseekChatCompletionsWithAgentResponses = {
 };
 
 export type DeepseekChatCompletionsWithAgentResponse = DeepseekChatCompletionsWithAgentResponses[keyof DeepseekChatCompletionsWithAgentResponses];
+
+export type ListEnvironmentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/environments';
+};
+
+export type ListEnvironmentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListEnvironmentsError = ListEnvironmentsErrors[keyof ListEnvironmentsErrors];
+
+export type ListEnvironmentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        environments: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            namespace: string | null;
+            networkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
+            restricted: boolean;
+            sortOrder: number;
+            createdAt: string;
+            updatedAt: string;
+            assignedCatalogCount: number;
+        }>;
+        defaultAssignedCatalogCount: number;
+    };
+};
+
+export type ListEnvironmentsResponse = ListEnvironmentsResponses[keyof ListEnvironmentsResponses];
+
+export type CreateEnvironmentData = {
+    body: {
+        name: string;
+        description?: string | null;
+        namespace?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
+        restricted?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments';
+};
+
+export type CreateEnvironmentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateEnvironmentError = CreateEnvironmentErrors[keyof CreateEnvironmentErrors];
+
+export type CreateEnvironmentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        namespace: string | null;
+        networkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        restricted: boolean;
+        sortOrder: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateEnvironmentResponse = CreateEnvironmentResponses[keyof CreateEnvironmentResponses];
+
+export type DeleteEnvironmentData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/environments/{id}';
+};
+
+export type DeleteEnvironmentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteEnvironmentError = DeleteEnvironmentErrors[keyof DeleteEnvironmentErrors];
+
+export type DeleteEnvironmentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteEnvironmentResponse = DeleteEnvironmentResponses[keyof DeleteEnvironmentResponses];
+
+export type UpdateEnvironmentData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        namespace?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
+        restricted?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/environments/{id}';
+};
+
+export type UpdateEnvironmentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateEnvironmentError = UpdateEnvironmentErrors[keyof UpdateEnvironmentErrors];
+
+export type UpdateEnvironmentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        namespace: string | null;
+        networkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        restricted: boolean;
+        sortOrder: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;
@@ -23262,7 +24338,7 @@ export type GetHealthResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok';
         version: string;
     };
 };
@@ -23282,9 +24358,9 @@ export type GetReadyErrors = {
      */
     503: {
         name: string;
-        status: string;
+        status: 'degraded';
         version: string;
-        database: string;
+        database: 'disconnected';
     };
 };
 
@@ -23296,9 +24372,9 @@ export type GetReadyResponses = {
      */
     200: {
         name: string;
-        status: string;
+        status: 'ok' | 'maintenance';
         version: string;
-        database: string;
+        database: 'connected' | 'not_checked';
     };
 };
 
@@ -23898,7 +24974,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -23938,12 +25014,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -23965,7 +25043,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24121,12 +25199,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24148,7 +25228,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24210,12 +25290,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24235,7 +25317,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24275,12 +25357,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24302,7 +25386,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24342,12 +25426,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24369,7 +25455,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24783,12 +25869,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24810,7 +25898,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24850,12 +25938,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24877,7 +25967,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24917,12 +26007,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -24944,7 +26036,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -24984,12 +26076,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25011,7 +26105,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25051,12 +26145,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25078,7 +26174,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25118,12 +26214,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25145,7 +26243,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25185,12 +26283,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25212,7 +26312,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25252,12 +26352,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25277,7 +26379,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25317,12 +26419,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25342,7 +26446,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25382,12 +26486,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25409,7 +26515,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25449,12 +26555,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25476,7 +26584,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25516,12 +26624,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25543,7 +26653,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25583,12 +26693,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25610,7 +26722,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25717,12 +26829,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25744,7 +26858,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
             authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
@@ -25900,12 +27014,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25947,7 +27063,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         /**
          * Filter by session ID
          */
@@ -26043,8 +27159,8 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
-            sources: Array<'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion'>;
+            source: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+            sources: Array<'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion'>;
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -26341,7 +27457,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26381,12 +27497,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26408,7 +27526,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26564,12 +27682,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26591,7 +27711,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26653,12 +27773,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26678,7 +27800,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26718,12 +27840,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26745,7 +27869,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -26785,12 +27909,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -26812,7 +27938,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27226,12 +28352,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27253,7 +28381,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27293,12 +28421,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27320,7 +28450,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27360,12 +28490,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27387,7 +28519,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27427,12 +28559,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27454,7 +28588,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27494,12 +28628,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27521,7 +28657,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27561,12 +28697,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27588,7 +28726,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27628,12 +28766,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27655,7 +28795,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27695,12 +28835,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27720,7 +28862,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27760,12 +28902,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27785,7 +28929,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27825,12 +28969,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27852,7 +28998,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27892,12 +29038,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27919,7 +29067,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -27959,12 +29107,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27986,7 +29136,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -28026,12 +29176,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28053,7 +29205,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -28160,12 +29312,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28187,7 +29341,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion';
         authMethod?: 'provider_key' | 'virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
@@ -28343,12 +29497,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28557,11 +29713,13 @@ export type GetInternalMcpCatalogResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -28692,11 +29850,13 @@ export type CreateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         parentCatalogItemId?: string | null;
         childName?: string | null;
+        clonedFrom?: string | null;
         presetEntryId?: string | null;
         presetFieldValues?: {
             [key: string]: UserConfigFieldDefaultInput;
         };
         presetSecretId?: string | null;
+        environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
             key: string;
@@ -28895,11 +30055,13 @@ export type CreateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -29193,11 +30355,13 @@ export type GetInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -29329,6 +30493,7 @@ export type UpdateInternalMcpCatalogItemData = {
             [key: string]: UserConfigFieldDefaultInput;
         };
         presetSecretId?: string | null;
+        environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
             key: string;
@@ -29529,11 +30694,13 @@ export type UpdateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -29731,6 +30898,91 @@ export type ReinstallInternalMcpCatalogItemResponses = {
 };
 
 export type ReinstallInternalMcpCatalogItemResponse = ReinstallInternalMcpCatalogItemResponses[keyof ReinstallInternalMcpCatalogItemResponses];
+
+export type RefreshInternalMcpCatalogImageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/refresh-image';
+};
+
+export type RefreshInternalMcpCatalogImageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RefreshInternalMcpCatalogImageError = RefreshInternalMcpCatalogImageErrors[keyof RefreshInternalMcpCatalogImageErrors];
+
+export type RefreshInternalMcpCatalogImageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RefreshInternalMcpCatalogImageResponse = RefreshInternalMcpCatalogImageResponses[keyof RefreshInternalMcpCatalogImageResponses];
 
 export type DeleteInternalMcpCatalogItemByNameData = {
     body?: never;
@@ -30429,11 +31681,13 @@ export type GetCatalogChildrenResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -30647,11 +31901,13 @@ export type CreateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -30865,11 +32121,13 @@ export type UpdateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
         };
         presetSecretId: string | null;
+        environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -31064,6 +32322,98 @@ export type CheckInvitationResponses = {
 };
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
+
+export type GetK8sCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/k8s/capabilities';
+};
+
+export type GetK8sCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetK8sCapabilitiesError = GetK8sCapabilitiesErrors[keyof GetK8sCapabilitiesErrors];
+
+export type GetK8sCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        networkPolicy: {
+            kubernetesNetworkPolicy: boolean;
+            ciliumNetworkPolicy: boolean;
+            gkeFqdnNetworkPolicy: boolean;
+            awsApplicationNetworkPolicy: boolean;
+            provider: 'cilium' | 'gke-fqdn' | 'aws-application-network-policy' | 'kubernetes' | 'none';
+            supportsFqdn: boolean;
+            supportsHttpMethods: boolean;
+            message: string | null;
+        };
+    };
+};
+
+export type GetK8sCapabilitiesResponse = GetK8sCapabilitiesResponses[keyof GetK8sCapabilitiesResponses];
 
 export type GetKnowledgeBasesData = {
     body?: never;
@@ -31739,10 +33089,14 @@ export type GetConnectorsResponses = {
                 type: 'github';
                 githubUrl: unknown;
                 owner: string;
+                authMethod?: 'pat' | 'github_app';
+                githubAppId?: string;
+                githubAppInstallationId?: string;
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
-                includeMarkdownFiles?: boolean;
+                includeRepositoryFiles?: boolean;
+                fileTypes?: Array<string>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -31891,10 +33245,14 @@ export type CreateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32096,10 +33454,14 @@ export type CreateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32398,10 +33760,14 @@ export type GetConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32536,10 +33902,14 @@ export type UpdateConnectorData = {
             type: 'github';
             githubUrl: string;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32742,10 +34112,14 @@ export type UpdateConnectorResponses = {
             type: 'github';
             githubUrl: unknown;
             owner: string;
+            authMethod?: 'pat' | 'github_app';
+            githubAppId?: string;
+            githubAppInstallationId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
-            includeMarkdownFiles?: boolean;
+            includeRepositoryFiles?: boolean;
+            fileTypes?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -32851,6 +34225,308 @@ export type UpdateConnectorResponses = {
 };
 
 export type UpdateConnectorResponse = UpdateConnectorResponses[keyof UpdateConnectorResponses];
+
+export type GetConnectorDocumentsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/connectors/{id}/documents';
+};
+
+export type GetConnectorDocumentsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectorDocumentsError = GetConnectorDocumentsErrors[keyof GetConnectorDocumentsErrors];
+
+export type GetConnectorDocumentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            sourceId: string | null;
+            connectorId: string;
+            title: string;
+            contentHash: string;
+            sourceUrl: string | null;
+            acl: Array<string>;
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            chunkCount: number;
+            createdAt: string;
+            updatedAt: string;
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetConnectorDocumentsResponse = GetConnectorDocumentsResponses[keyof GetConnectorDocumentsResponses];
+
+export type DeleteConnectorDocumentData = {
+    body?: never;
+    path: {
+        id: string;
+        docId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/{docId}';
+};
+
+export type DeleteConnectorDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteConnectorDocumentError = DeleteConnectorDocumentErrors[keyof DeleteConnectorDocumentErrors];
+
+export type DeleteConnectorDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConnectorDocumentResponse = DeleteConnectorDocumentResponses[keyof DeleteConnectorDocumentResponses];
+
+export type GetConnectorDocumentData = {
+    body?: never;
+    path: {
+        id: string;
+        docId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/documents/{docId}';
+};
+
+export type GetConnectorDocumentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectorDocumentError = GetConnectorDocumentErrors[keyof GetConnectorDocumentErrors];
+
+export type GetConnectorDocumentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        sourceId: string | null;
+        connectorId: string;
+        title: string;
+        content: string;
+        contentHash: string;
+        sourceUrl: string | null;
+        acl: Array<string>;
+        metadata: {
+            [key: string]: unknown;
+        } | null;
+        embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        chunkCount: number;
+        createdAt: string;
+        updatedAt: string;
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+    };
+};
+
+export type GetConnectorDocumentResponse = GetConnectorDocumentResponses[keyof GetConnectorDocumentResponses];
 
 export type SyncConnectorData = {
     body?: never;
@@ -33593,20 +35269,14 @@ export type GetConnectorRunResponses = {
 
 export type GetConnectorRunResponse = GetConnectorRunResponses[keyof GetConnectorRunResponses];
 
-export type GetConnectorFilesData = {
+export type GetKnowledgeFileUploadConfigData = {
     body?: never;
-    path: {
-        id: string;
-    };
-    query?: {
-        limit?: number;
-        offset?: number;
-        search?: string;
-    };
-    url: '/api/connectors/{id}/files';
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/config';
 };
 
-export type GetConnectorFilesErrors = {
+export type GetKnowledgeFileUploadConfigErrors = {
     /**
      * Default Response
      */
@@ -33669,9 +35339,98 @@ export type GetConnectorFilesErrors = {
     };
 };
 
-export type GetConnectorFilesError = GetConnectorFilesErrors[keyof GetConnectorFilesErrors];
+export type GetKnowledgeFileUploadConfigError = GetKnowledgeFileUploadConfigErrors[keyof GetKnowledgeFileUploadConfigErrors];
 
-export type GetConnectorFilesResponses = {
+export type GetKnowledgeFileUploadConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        maxFileSizeBytes: number;
+        externalBlobStorageEnabled: boolean;
+        blobStorageProvider: string;
+    };
+};
+
+export type GetKnowledgeFileUploadConfigResponse = GetKnowledgeFileUploadConfigResponses[keyof GetKnowledgeFileUploadConfigResponses];
+
+export type GetKnowledgeFilesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/knowledge-files';
+};
+
+export type GetKnowledgeFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeFilesError = GetKnowledgeFilesErrors[keyof GetKnowledgeFilesErrors];
+
+export type GetKnowledgeFilesResponses = {
     /**
      * Default Response
      */
@@ -33679,14 +35438,23 @@ export type GetConnectorFilesResponses = {
         data: Array<{
             id: string;
             connectorId: string;
+            ownerId?: string | null;
+            visibility: 'personal' | 'team' | 'org';
+            teamIds: Array<string>;
             originalName: string;
             mimeType: string;
             fileSize: number;
             contentHash: string;
+            blobStorageProvider?: string | null;
             createdAt: string;
-            processingStatus: string;
+            processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
             processingError: string | null;
             embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+            assignedAgents: Array<{
+                id: string;
+                name: string;
+                agentType: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -33699,24 +35467,25 @@ export type GetConnectorFilesResponses = {
     };
 };
 
-export type GetConnectorFilesResponse = GetConnectorFilesResponses[keyof GetConnectorFilesResponses];
+export type GetKnowledgeFilesResponse = GetKnowledgeFilesResponses[keyof GetKnowledgeFilesResponses];
 
-export type UploadConnectorFilesData = {
+export type UploadKnowledgeFilesData = {
     body: {
+        visibility?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
         files: Array<{
             name: string;
             mimeType: string;
             content: string;
         }>;
     };
-    path: {
-        id: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/connectors/{id}/files';
+    url: '/api/knowledge-files';
 };
 
-export type UploadConnectorFilesErrors = {
+export type UploadKnowledgeFilesErrors = {
     /**
      * Default Response
      */
@@ -33779,34 +35548,33 @@ export type UploadConnectorFilesErrors = {
     };
 };
 
-export type UploadConnectorFilesError = UploadConnectorFilesErrors[keyof UploadConnectorFilesErrors];
+export type UploadKnowledgeFilesError = UploadKnowledgeFilesErrors[keyof UploadKnowledgeFilesErrors];
 
-export type UploadConnectorFilesResponses = {
+export type UploadKnowledgeFilesResponses = {
     /**
      * Default Response
      */
     200: {
         results: Array<{
             filename: string;
-            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed';
+            status: 'created' | 'duplicate' | 'unsupported' | 'too_large' | 'extraction_failed' | 'failed';
             fileId?: string;
         }>;
     };
 };
 
-export type UploadConnectorFilesResponse = UploadConnectorFilesResponses[keyof UploadConnectorFilesResponses];
+export type UploadKnowledgeFilesResponse = UploadKnowledgeFilesResponses[keyof UploadKnowledgeFilesResponses];
 
-export type DeleteConnectorFileData = {
+export type DeleteKnowledgeFileData = {
     body?: never;
     path: {
-        id: string;
         fileId: string;
     };
     query?: never;
-    url: '/api/connectors/{id}/files/{fileId}';
+    url: '/api/knowledge-files/{fileId}';
 };
 
-export type DeleteConnectorFileErrors = {
+export type DeleteKnowledgeFileErrors = {
     /**
      * Default Response
      */
@@ -33869,9 +35637,9 @@ export type DeleteConnectorFileErrors = {
     };
 };
 
-export type DeleteConnectorFileError = DeleteConnectorFileErrors[keyof DeleteConnectorFileErrors];
+export type DeleteKnowledgeFileError = DeleteKnowledgeFileErrors[keyof DeleteKnowledgeFileErrors];
 
-export type DeleteConnectorFileResponses = {
+export type DeleteKnowledgeFileResponses = {
     /**
      * Default Response
      */
@@ -33880,19 +35648,18 @@ export type DeleteConnectorFileResponses = {
     };
 };
 
-export type DeleteConnectorFileResponse = DeleteConnectorFileResponses[keyof DeleteConnectorFileResponses];
+export type DeleteKnowledgeFileResponse = DeleteKnowledgeFileResponses[keyof DeleteKnowledgeFileResponses];
 
-export type GetConnectorFileData = {
+export type GetKnowledgeFileData = {
     body?: never;
     path: {
-        id: string;
         fileId: string;
     };
     query?: never;
-    url: '/api/connectors/{id}/files/{fileId}';
+    url: '/api/knowledge-files/{fileId}';
 };
 
-export type GetConnectorFileErrors = {
+export type GetKnowledgeFileErrors = {
     /**
      * Default Response
      */
@@ -33955,27 +35722,219 @@ export type GetConnectorFileErrors = {
     };
 };
 
-export type GetConnectorFileError = GetConnectorFileErrors[keyof GetConnectorFileErrors];
+export type GetKnowledgeFileError = GetKnowledgeFileErrors[keyof GetKnowledgeFileErrors];
 
-export type GetConnectorFileResponses = {
+export type GetKnowledgeFileResponses = {
     /**
      * Default Response
      */
     200: {
         id: string;
         connectorId: string;
+        ownerId?: string | null;
+        visibility: 'personal' | 'team' | 'org';
+        teamIds: Array<string>;
         originalName: string;
         mimeType: string;
         fileSize: number;
         contentHash: string;
+        blobStorageProvider?: string | null;
         createdAt: string;
-        processingStatus: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
         processingError: string | null;
         embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+            agentType: string;
+        }>;
     };
 };
 
-export type GetConnectorFileResponse = GetConnectorFileResponses[keyof GetConnectorFileResponses];
+export type GetKnowledgeFileResponse = GetKnowledgeFileResponses[keyof GetKnowledgeFileResponses];
+
+export type UpdateKnowledgeFileData = {
+    body: {
+        visibility: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
+        agentIds?: Array<string>;
+    };
+    path: {
+        fileId: string;
+    };
+    query?: never;
+    url: '/api/knowledge-files/{fileId}';
+};
+
+export type UpdateKnowledgeFileErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateKnowledgeFileError = UpdateKnowledgeFileErrors[keyof UpdateKnowledgeFileErrors];
+
+export type UpdateKnowledgeFileResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        connectorId: string;
+        ownerId?: string | null;
+        visibility: 'personal' | 'team' | 'org';
+        teamIds: Array<string>;
+        originalName: string;
+        mimeType: string;
+        fileSize: number;
+        contentHash: string;
+        blobStorageProvider?: string | null;
+        createdAt: string;
+        processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        processingError: string | null;
+        embeddingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+        assignedAgents: Array<{
+            id: string;
+            name: string;
+            agentType: string;
+        }>;
+    };
+};
+
+export type UpdateKnowledgeFileResponse = UpdateKnowledgeFileResponses[keyof UpdateKnowledgeFileResponses];
+
+export type GetKnowledgeFileContentData = {
+    body?: never;
+    path: {
+        fileId: string;
+    };
+    query?: {
+        download?: boolean;
+    };
+    url: '/api/knowledge-files/{fileId}/content';
+};
+
+export type GetKnowledgeFileContentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetKnowledgeFileContentError = GetKnowledgeFileContentErrors[keyof GetKnowledgeFileContentErrors];
 
 export type GetLimitsData = {
     body?: never;
@@ -34066,7 +36025,7 @@ export type GetLimitsResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -34090,7 +36049,7 @@ export type CreateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path?: never;
@@ -34176,7 +36135,7 @@ export type CreateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -34357,7 +36316,7 @@ export type GetLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -34375,7 +36334,7 @@ export type UpdateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path: {
@@ -34463,7 +36422,7 @@ export type UpdateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -34569,7 +36528,6 @@ export type GetLlmModelsResponses = {
             priceSource: 'custom' | 'models_dev' | 'default';
         };
         isBest?: boolean;
-        isFastest?: boolean;
         isFree: boolean;
         embeddingDimensions?: EmbeddingDimensions | null;
     }>;
@@ -34756,7 +36714,6 @@ export type GetModelsWithApiKeysResponses = {
         lastSyncedAt: string;
         createdAt: string;
         updatedAt: string;
-        isFastest: boolean;
         isBest: boolean;
         apiKeys: Array<{
             id: string;
@@ -36168,274 +38125,6 @@ export type ListMcpPresetEntriesResponses = {
 };
 
 export type ListMcpPresetEntriesResponse = ListMcpPresetEntriesResponses[keyof ListMcpPresetEntriesResponses];
-
-export type CreateMcpPresetEntryData = {
-    body: {
-        name: string;
-        validationRegex?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/mcp-preset-entries';
-};
-
-export type CreateMcpPresetEntryErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateMcpPresetEntryError = CreateMcpPresetEntryErrors[keyof CreateMcpPresetEntryErrors];
-
-export type CreateMcpPresetEntryResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        sortOrder: number;
-        validationRegex: string | null;
-        createdAt: string;
-    };
-};
-
-export type CreateMcpPresetEntryResponse = CreateMcpPresetEntryResponses[keyof CreateMcpPresetEntryResponses];
-
-export type DeleteMcpPresetEntryData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/organization/mcp-preset-entries/{id}';
-};
-
-export type DeleteMcpPresetEntryErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteMcpPresetEntryError = DeleteMcpPresetEntryErrors[keyof DeleteMcpPresetEntryErrors];
-
-export type DeleteMcpPresetEntryResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteMcpPresetEntryResponse = DeleteMcpPresetEntryResponses[keyof DeleteMcpPresetEntryResponses];
-
-export type UpdateMcpPresetEntryData = {
-    body: {
-        validationRegex: string | null;
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/organization/mcp-preset-entries/{id}';
-};
-
-export type UpdateMcpPresetEntryErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateMcpPresetEntryError = UpdateMcpPresetEntryErrors[keyof UpdateMcpPresetEntryErrors];
-
-export type UpdateMcpPresetEntryResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        sortOrder: number;
-        validationRegex: string | null;
-        createdAt: string;
-    };
-};
-
-export type UpdateMcpPresetEntryResponse = UpdateMcpPresetEntryResponses[keyof UpdateMcpPresetEntryResponses];
 
 export type McpProxyPostData = {
     body: {
@@ -40180,6 +41869,224 @@ export type ModelRouterResponsesWithAgentResponses = {
 
 export type ModelRouterResponsesWithAgentResponse = ModelRouterResponsesWithAgentResponses[keyof ModelRouterResponsesWithAgentResponses];
 
+export type ModelRouterEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/model-router/embeddings';
+};
+
+export type ModelRouterEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterEmbeddingsWithDefaultAgentError = ModelRouterEmbeddingsWithDefaultAgentErrors[keyof ModelRouterEmbeddingsWithDefaultAgentErrors];
+
+export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type ModelRouterEmbeddingsWithDefaultAgentResponse = ModelRouterEmbeddingsWithDefaultAgentResponses[keyof ModelRouterEmbeddingsWithDefaultAgentResponses];
+
+export type ModelRouterEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/model-router/{agentId}/embeddings';
+};
+
+export type ModelRouterEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ModelRouterEmbeddingsWithAgentError = ModelRouterEmbeddingsWithAgentErrors[keyof ModelRouterEmbeddingsWithAgentErrors];
+
+export type ModelRouterEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type ModelRouterEmbeddingsWithAgentResponse = ModelRouterEmbeddingsWithAgentResponses[keyof ModelRouterEmbeddingsWithAgentResponses];
+
 export type ModelRouterChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -40777,6 +42684,224 @@ export type OllamaChatCompletionsWithAgentResponses = {
 };
 
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
+
+export type OpenAiEmbeddingsWithDefaultAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/embeddings';
+};
+
+export type OpenAiEmbeddingsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiEmbeddingsWithDefaultAgentError = OpenAiEmbeddingsWithDefaultAgentErrors[keyof OpenAiEmbeddingsWithDefaultAgentErrors];
+
+export type OpenAiEmbeddingsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type OpenAiEmbeddingsWithDefaultAgentResponse = OpenAiEmbeddingsWithDefaultAgentResponses[keyof OpenAiEmbeddingsWithDefaultAgentResponses];
+
+export type OpenAiEmbeddingsWithAgentData = {
+    body: {
+        model: string;
+        input: string | Array<string>;
+        dimensions?: number;
+        encoding_format?: 'float' | 'base64';
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/embeddings';
+};
+
+export type OpenAiEmbeddingsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiEmbeddingsWithAgentError = OpenAiEmbeddingsWithAgentErrors[keyof OpenAiEmbeddingsWithAgentErrors];
+
+export type OpenAiEmbeddingsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            object: 'embedding';
+            embedding: Array<number>;
+            index: number;
+        }>;
+        model: string;
+        usage: {
+            prompt_tokens: number;
+            total_tokens: number;
+        };
+    };
+};
+
+export type OpenAiEmbeddingsWithAgentResponse = OpenAiEmbeddingsWithAgentResponses[keyof OpenAiEmbeddingsWithAgentResponses];
 
 export type OpenAiResponsesWithDefaultAgentData = {
     /**
@@ -42071,7 +44196,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -42095,7 +44220,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
         };
     };
     path?: never;
@@ -42179,7 +44304,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -42365,7 +44490,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -42380,7 +44505,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
         };
     };
     path: {
@@ -42469,7 +44594,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -42559,6 +44684,7 @@ export type GetOrganizationResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -42581,7 +44707,7 @@ export type GetOrganizationResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -42620,6 +44746,16 @@ export type GetOrganizationResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -42840,6 +44976,7 @@ export type UpdateAppearanceSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -42862,7 +44999,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -42901,6 +45038,16 @@ export type UpdateAppearanceSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -42992,6 +45139,7 @@ export type UpdateSecuritySettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -43014,7 +45162,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -43053,6 +45201,16 @@ export type UpdateSecuritySettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -43067,7 +45225,7 @@ export type UpdateLlmSettingsData = {
         compressionScope?: 'organization' | 'team';
         defaultUserLimitValue?: number | null;
         defaultUserLimitModel?: Array<string> | null;
-        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
     };
     path?: never;
     query?: never;
@@ -43147,6 +45305,7 @@ export type UpdateLlmSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -43169,7 +45328,7 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -43208,6 +45367,16 @@ export type UpdateLlmSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -43301,6 +45470,7 @@ export type UpdateAgentSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -43323,7 +45493,7 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -43362,6 +45532,16 @@ export type UpdateAgentSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -43462,6 +45642,7 @@ export type UpdateConnectionSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -43484,7 +45665,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -43523,6 +45704,16 @@ export type UpdateConnectionSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -43531,17 +45722,25 @@ export type UpdateConnectionSettingsResponses = {
 
 export type UpdateConnectionSettingsResponse = UpdateConnectionSettingsResponses[keyof UpdateConnectionSettingsResponses];
 
-export type UpdatePresetEntityNameData = {
+export type UpdateDefaultEnvironmentData = {
     body: {
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
+        name?: string | null;
+        description?: string | null;
+        namespace?: string | null;
+        networkPolicy?: {
+            egressMode?: 'off' | 'restricted' | 'unrestricted';
+            domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains?: Array<string>;
+            allowedCidrs?: Array<string>;
+        } | null;
+        restricted?: boolean;
     };
     path?: never;
     query?: never;
-    url: '/api/organization/preset-entity-name';
+    url: '/api/organization/default-environment';
 };
 
-export type UpdatePresetEntityNameErrors = {
+export type UpdateDefaultEnvironmentErrors = {
     /**
      * Default Response
      */
@@ -43604,9 +45803,9 @@ export type UpdatePresetEntityNameErrors = {
     };
 };
 
-export type UpdatePresetEntityNameError = UpdatePresetEntityNameErrors[keyof UpdatePresetEntityNameErrors];
+export type UpdateDefaultEnvironmentError = UpdateDefaultEnvironmentErrors[keyof UpdateDefaultEnvironmentErrors];
 
-export type UpdatePresetEntityNameResponses = {
+export type UpdateDefaultEnvironmentResponses = {
     /**
      * Default Response
      */
@@ -43614,6 +45813,7 @@ export type UpdatePresetEntityNameResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -43636,7 +45836,7 @@ export type UpdatePresetEntityNameResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -43675,315 +45875,23 @@ export type UpdatePresetEntityNameResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
-        skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
-    };
-};
-
-export type UpdatePresetEntityNameResponse = UpdatePresetEntityNameResponses[keyof UpdatePresetEntityNameResponses];
-
-export type UpdatePresetEntityDefaultLabelData = {
-    body: {
-        presetEntityDefaultLabel: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/preset-entity-default-label';
-};
-
-export type UpdatePresetEntityDefaultLabelErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdatePresetEntityDefaultLabelError = UpdatePresetEntityDefaultLabelErrors[keyof UpdatePresetEntityDefaultLabelErrors];
-
-export type UpdatePresetEntityDefaultLabelResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        slug: string;
-        logo: string | null;
-        logoDark: string | null;
-        createdAt: string;
-        metadata: string | null;
-        onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
-        globalToolPolicy: 'permissive' | 'restrictive';
-        allowChatFileUploads: boolean;
-        embeddingModel: string | null;
-        embeddingDimensions: EmbeddingDimensions | null;
-        embeddingChatApiKeyId: string | null;
-        rerankerChatApiKeyId: string | null;
-        rerankerModel: string | null;
-        defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-        defaultModelId: string | null;
-        defaultLlmApiKeyId: string | null;
-        defaultUserLimitValue: number | null;
-        defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-        defaultAgentId: string | null;
-        favicon: string | null;
-        appName: string | null;
-        ogDescription: string | null;
-        footerText: string | null;
-        chatLinks: Array<{
-            label: string;
-            url: string;
-        }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
         } | null;
-        chatPlaceholders: Array<string> | null;
-        animateChatPlaceholders: boolean;
-        iconLogo: string | null;
-        iconLogoDark: string | null;
-        chatErrorSupportMessage: string | null;
-        slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
-        oauthAccessTokenLifetimeSeconds: number;
-        connectionDefaultMcpGatewayId: string | null;
-        connectionDefaultLlmProxyId: string | null;
-        connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
-        connectionBaseUrls: Array<{
-            url: string;
-            description: string;
-            isDefault: boolean;
-            visible: boolean;
-        }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
     };
 };
 
-export type UpdatePresetEntityDefaultLabelResponse = UpdatePresetEntityDefaultLabelResponses[keyof UpdatePresetEntityDefaultLabelResponses];
-
-export type UpdatePresetEntityDefaultValidationRegexData = {
-    body: {
-        presetEntityDefaultValidationRegex: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/organization/preset-entity-default-validation-regex';
-};
-
-export type UpdatePresetEntityDefaultValidationRegexErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdatePresetEntityDefaultValidationRegexError = UpdatePresetEntityDefaultValidationRegexErrors[keyof UpdatePresetEntityDefaultValidationRegexErrors];
-
-export type UpdatePresetEntityDefaultValidationRegexResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        slug: string;
-        logo: string | null;
-        logoDark: string | null;
-        createdAt: string;
-        metadata: string | null;
-        onboardingComplete: boolean;
-        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
-        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
-        convertToolResultsToToon: boolean;
-        compressionScope: 'organization' | 'team';
-        globalToolPolicy: 'permissive' | 'restrictive';
-        allowChatFileUploads: boolean;
-        embeddingModel: string | null;
-        embeddingDimensions: EmbeddingDimensions | null;
-        embeddingChatApiKeyId: string | null;
-        rerankerChatApiKeyId: string | null;
-        rerankerModel: string | null;
-        defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
-        defaultModelId: string | null;
-        defaultLlmApiKeyId: string | null;
-        defaultUserLimitValue: number | null;
-        defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
-        defaultAgentId: string | null;
-        favicon: string | null;
-        appName: string | null;
-        ogDescription: string | null;
-        footerText: string | null;
-        chatLinks: Array<{
-            label: string;
-            url: string;
-        }> | null;
-        onboardingWizard: {
-            label: string;
-            pages: Array<{
-                image?: string | null;
-                content: string;
-            }>;
-        } | null;
-        chatPlaceholders: Array<string> | null;
-        animateChatPlaceholders: boolean;
-        iconLogo: string | null;
-        iconLogoDark: string | null;
-        chatErrorSupportMessage: string | null;
-        slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
-        oauthAccessTokenLifetimeSeconds: number;
-        connectionDefaultMcpGatewayId: string | null;
-        connectionDefaultLlmProxyId: string | null;
-        connectionDefaultClientId: string | null;
-        connectionShownClientIds: Array<string> | null;
-        connectionShownProviders: Array<string> | null;
-        connectionBaseUrls: Array<{
-            url: string;
-            description: string;
-            isDefault: boolean;
-            visible: boolean;
-        }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
-        skillToolsEnabled: boolean;
-        skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
-    };
-};
-
-export type UpdatePresetEntityDefaultValidationRegexResponse = UpdatePresetEntityDefaultValidationRegexResponses[keyof UpdatePresetEntityDefaultValidationRegexResponses];
+export type UpdateDefaultEnvironmentResponse = UpdateDefaultEnvironmentResponses[keyof UpdateDefaultEnvironmentResponses];
 
 export type UpdateAuthSettingsData = {
     body: {
@@ -44068,6 +45976,7 @@ export type UpdateAuthSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -44090,7 +45999,7 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -44129,6 +46038,16 @@ export type UpdateAuthSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -44222,6 +46141,7 @@ export type UpdateKnowledgeSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -44244,7 +46164,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -44283,6 +46203,16 @@ export type UpdateKnowledgeSettingsResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -44371,6 +46301,7 @@ export type DropEmbeddingConfigResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -44393,7 +46324,7 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -44432,6 +46363,16 @@ export type DropEmbeddingConfigResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -44609,6 +46550,7 @@ export type CompleteOnboardingResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -44631,7 +46573,7 @@ export type CompleteOnboardingResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -44670,6 +46612,16 @@ export type CompleteOnboardingResponses = {
         presetEntityName: string | null;
         presetEntityNamePlural: string | null;
         presetEntityDefaultLabel: string | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
         presetEntityDefaultValidationRegex: string | null;
@@ -46439,6 +48391,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         pinnedAt: string | null;
+        lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         agent: {
@@ -46446,6 +48399,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -46457,12 +48411,14 @@ export type CreateScheduleTriggerRunConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -46752,6 +48708,1208 @@ export type CheckSecretsConnectivityResponses = {
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
 
+export type GetServiceAccountsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/service-accounts';
+};
+
+export type GetServiceAccountsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetServiceAccountsError = GetServiceAccountsErrors[keyof GetServiceAccountsErrors];
+
+export type GetServiceAccountsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        role: string;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tokenCount: number;
+    }>;
+};
+
+export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetServiceAccountsResponses];
+
+export type CreateServiceAccountData = {
+    body: {
+        name: string;
+        role: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/service-accounts';
+};
+
+export type CreateServiceAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateServiceAccountError = CreateServiceAccountErrors[keyof CreateServiceAccountErrors];
+
+export type CreateServiceAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        role: string;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tokenCount: number;
+        tokens: Array<{
+            id: string;
+            name: string;
+            tokenStart: string;
+            disabled: boolean;
+            lastUsedAt: string | null;
+            expiresAt: string | null;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type CreateServiceAccountResponse = CreateServiceAccountResponses[keyof CreateServiceAccountResponses];
+
+export type DeleteServiceAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}';
+};
+
+export type DeleteServiceAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteServiceAccountError = DeleteServiceAccountErrors[keyof DeleteServiceAccountErrors];
+
+export type DeleteServiceAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteServiceAccountResponse = DeleteServiceAccountResponses[keyof DeleteServiceAccountResponses];
+
+export type GetServiceAccountData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}';
+};
+
+export type GetServiceAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetServiceAccountError = GetServiceAccountErrors[keyof GetServiceAccountErrors];
+
+export type GetServiceAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        role: string;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tokenCount: number;
+        tokens: Array<{
+            id: string;
+            name: string;
+            tokenStart: string;
+            disabled: boolean;
+            lastUsedAt: string | null;
+            expiresAt: string | null;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServiceAccountResponses];
+
+export type UpdateServiceAccountData = {
+    body: {
+        name?: string;
+        role?: string;
+        disabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}';
+};
+
+export type UpdateServiceAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateServiceAccountError = UpdateServiceAccountErrors[keyof UpdateServiceAccountErrors];
+
+export type UpdateServiceAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        role: string;
+        disabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        tokenCount: number;
+        tokens: Array<{
+            id: string;
+            name: string;
+            tokenStart: string;
+            disabled: boolean;
+            lastUsedAt: string | null;
+            expiresAt: string | null;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type UpdateServiceAccountResponse = UpdateServiceAccountResponses[keyof UpdateServiceAccountResponses];
+
+export type CreateServiceAccountTokenData = {
+    body: {
+        name: string;
+        expiresIn?: number | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/tokens';
+};
+
+export type CreateServiceAccountTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateServiceAccountTokenError = CreateServiceAccountTokenErrors[keyof CreateServiceAccountTokenErrors];
+
+export type CreateServiceAccountTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        disabled: boolean;
+        lastUsedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        token: string;
+    };
+};
+
+export type CreateServiceAccountTokenResponse = CreateServiceAccountTokenResponses[keyof CreateServiceAccountTokenResponses];
+
+export type DeleteServiceAccountTokenData = {
+    body?: never;
+    path: {
+        id: string;
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/tokens/{tokenId}';
+};
+
+export type DeleteServiceAccountTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteServiceAccountTokenError = DeleteServiceAccountTokenErrors[keyof DeleteServiceAccountTokenErrors];
+
+export type DeleteServiceAccountTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteServiceAccountTokenResponse = DeleteServiceAccountTokenResponses[keyof DeleteServiceAccountTokenResponses];
+
+export type UpdateServiceAccountTokenData = {
+    body: {
+        name?: string;
+        expiresAt?: unknown;
+        disabled?: boolean;
+    };
+    path: {
+        id: string;
+        tokenId: string;
+    };
+    query?: never;
+    url: '/api/service-accounts/{id}/tokens/{tokenId}';
+};
+
+export type UpdateServiceAccountTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateServiceAccountTokenError = UpdateServiceAccountTokenErrors[keyof UpdateServiceAccountTokenErrors];
+
+export type UpdateServiceAccountTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        tokenStart: string;
+        disabled: boolean;
+        lastUsedAt: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+    };
+};
+
+export type UpdateServiceAccountTokenResponse = UpdateServiceAccountTokenResponses[keyof UpdateServiceAccountTokenResponses];
+
+export type GetSiteNotificationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-notification';
+};
+
+export type GetSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSiteNotificationError = GetSiteNotificationErrors[keyof GetSiteNotificationErrors];
+
+export type GetSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    } | null;
+};
+
+export type GetSiteNotificationResponse = GetSiteNotificationResponses[keyof GetSiteNotificationResponses];
+
+export type CreateSiteNotificationData = {
+    body: {
+        content: string;
+        expiresAt?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/site-notification';
+};
+
+export type CreateSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSiteNotificationError = CreateSiteNotificationErrors[keyof CreateSiteNotificationErrors];
+
+export type CreateSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    };
+};
+
+export type CreateSiteNotificationResponse = CreateSiteNotificationResponses[keyof CreateSiteNotificationResponses];
+
+export type GetSiteNotificationSettingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/site-notification/settings';
+};
+
+export type GetSiteNotificationSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSiteNotificationSettingsError = GetSiteNotificationSettingsErrors[keyof GetSiteNotificationSettingsErrors];
+
+export type GetSiteNotificationSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    } | null;
+};
+
+export type GetSiteNotificationSettingsResponse = GetSiteNotificationSettingsResponses[keyof GetSiteNotificationSettingsResponses];
+
+export type DeleteSiteNotificationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/site-notification/{id}';
+};
+
+export type DeleteSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteSiteNotificationError = DeleteSiteNotificationErrors[keyof DeleteSiteNotificationErrors];
+
+export type DeleteSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: never;
+    };
+};
+
+export type DeleteSiteNotificationResponse = DeleteSiteNotificationResponses[keyof DeleteSiteNotificationResponses];
+
+export type UpdateSiteNotificationData = {
+    body: {
+        content?: string;
+        expiresAt?: string | null;
+        isActive?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/site-notification/{id}';
+};
+
+export type UpdateSiteNotificationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSiteNotificationError = UpdateSiteNotificationErrors[keyof UpdateSiteNotificationErrors];
+
+export type UpdateSiteNotificationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        content: string;
+        expiresAt: string | null;
+        createdAt: string;
+        isActive: boolean;
+    };
+};
+
+export type UpdateSiteNotificationResponse = UpdateSiteNotificationResponses[keyof UpdateSiteNotificationResponses];
+
 export type GetSkillsData = {
     body?: never;
     path?: never;
@@ -46838,20 +49996,28 @@ export type GetSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;
             license: string | null;
             compatibility: string | null;
+            allowedTools: string | null;
+            templated: boolean;
             metadata: {
                 [key: string]: string;
             };
-            sourceType: 'manual' | 'github';
+            sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
             createdAt: string;
             updatedAt: string;
             fileCount: number;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+            authorName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -46874,6 +50040,8 @@ export type CreateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -46953,15 +50121,18 @@ export type CreateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
+        templated: boolean;
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -46975,10 +50146,231 @@ export type CreateSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
     };
 };
 
 export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponses];
+
+export type ConvertAgentToSkillData = {
+    body: {
+        description?: string;
+        deleteAgent?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/convert-to-skill';
+};
+
+export type ConvertAgentToSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConvertAgentToSkillError = ConvertAgentToSkillErrors[keyof ConvertAgentToSkillErrors];
+
+export type ConvertAgentToSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        skill: {
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            name: string;
+            description: string;
+            content: string;
+            license: string | null;
+            compatibility: string | null;
+            allowedTools: string | null;
+            templated: boolean;
+            metadata: {
+                [key: string]: string;
+            };
+            sourceType: 'manual' | 'github' | 'built_in';
+            sourceRef: string | null;
+            sourceCommit: string | null;
+            createdAt: string;
+            updatedAt: string;
+            files: Array<{
+                id: string;
+                skillId: string;
+                path: string;
+                content: string;
+                encoding: 'utf8' | 'base64';
+                kind: 'reference' | 'script' | 'asset';
+                createdAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+        };
+        report: {
+            carried: Array<{
+                field: string;
+                detail: string;
+            }>;
+            annotated: Array<{
+                field: string;
+                detail: string;
+            }>;
+        };
+        deletedAgent: boolean;
+    };
+};
+
+export type ConvertAgentToSkillResponse = ConvertAgentToSkillResponses[keyof ConvertAgentToSkillResponses];
+
+export type SuggestSkillDescriptionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/suggest-skill-description';
+};
+
+export type SuggestSkillDescriptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SuggestSkillDescriptionError = SuggestSkillDescriptionErrors[keyof SuggestSkillDescriptionErrors];
+
+export type SuggestSkillDescriptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        description: string;
+    };
+};
+
+export type SuggestSkillDescriptionResponse = SuggestSkillDescriptionResponses[keyof SuggestSkillDescriptionResponses];
 
 export type DeleteSkillData = {
     body?: never;
@@ -47147,15 +50539,18 @@ export type GetSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
+        templated: boolean;
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -47168,6 +50563,10 @@ export type GetSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47182,6 +50581,8 @@ export type UpdateSkillData = {
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -47263,15 +50664,18 @@ export type UpdateSkillResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
+        templated: boolean;
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -47284,6 +50688,10 @@ export type UpdateSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
         }>;
     };
 };
@@ -47373,6 +50781,122 @@ export type GetSkillSourceReposResponses = {
 
 export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
 
+export type ResetSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/reset';
+};
+
+export type ResetSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResetSkillError = ResetSkillErrors[keyof ResetSkillErrors];
+
+export type ResetSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string;
+        content: string;
+        license: string | null;
+        compatibility: string | null;
+        allowedTools: string | null;
+        templated: boolean;
+        metadata: {
+            [key: string]: string;
+        };
+        sourceType: 'manual' | 'github' | 'built_in';
+        sourceRef: string | null;
+        sourceCommit: string | null;
+        createdAt: string;
+        updatedAt: string;
+        files: Array<{
+            id: string;
+            skillId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'reference' | 'script' | 'asset';
+            createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type ResetSkillResponse = ResetSkillResponses[keyof ResetSkillResponses];
+
 export type EnableSkillToolDefaultsData = {
     body?: never;
     path?: never;
@@ -47456,6 +50980,100 @@ export type EnableSkillToolDefaultsResponses = {
 };
 
 export type EnableSkillToolDefaultsResponse = EnableSkillToolDefaultsResponses[keyof EnableSkillToolDefaultsResponses];
+
+export type SearchSkillCatalogData = {
+    body?: never;
+    path?: never;
+    query?: {
+        q?: string;
+        limit?: number;
+    };
+    url: '/api/skills/catalog/search';
+};
+
+export type SearchSkillCatalogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SearchSkillCatalogError = SearchSkillCatalogErrors[keyof SearchSkillCatalogErrors];
+
+export type SearchSkillCatalogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        results: Array<{
+            repo: string;
+            skillPath: string;
+            name: string;
+            description: string;
+            compatibility: string | null;
+            fileCount: number;
+        }>;
+        totalCount: number;
+    };
+};
+
+export type SearchSkillCatalogResponse = SearchSkillCatalogResponses[keyof SearchSkillCatalogResponses];
 
 export type DiscoverGithubSkillsData = {
     body: {
@@ -47545,6 +51163,8 @@ export type DiscoverGithubSkillsResponses = {
             name: string;
             description: string;
             compatibility: string | null;
+            allowedTools: string | null;
+            templated: boolean;
             fileCount: number;
             exists: boolean;
         }>;
@@ -47640,6 +51260,8 @@ export type PreviewGithubSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
+        templated: boolean;
         metadata: {
             [key: string]: string;
         };
@@ -47662,6 +51284,8 @@ export type ImportGithubSkillsData = {
         path?: string;
         githubToken?: string;
         skillPaths: Array<string>;
+        scope?: 'personal' | 'team' | 'org';
+        teamIds?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -47742,15 +51366,18 @@ export type ImportGithubSkillsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
             content: string;
             license: string | null;
             compatibility: string | null;
+            allowedTools: string | null;
+            templated: boolean;
             metadata: {
                 [key: string]: string;
             };
-            sourceType: 'manual' | 'github';
+            sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
             createdAt: string;
@@ -47761,6 +51388,318 @@ export type ImportGithubSkillsResponses = {
 };
 
 export type ImportGithubSkillsResponse = ImportGithubSkillsResponses[keyof ImportGithubSkillsResponses];
+
+export type GetSkillSandboxArtifactData = {
+    body?: never;
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/artifacts/{artifactId}';
+};
+
+export type GetSkillSandboxArtifactResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetSkillShareLinksData = {
+    body?: never;
+    path?: never;
+    query?: {
+        skillId?: string;
+    };
+    url: '/api/skill-share-links';
+};
+
+export type GetSkillShareLinksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillShareLinksError = GetSkillShareLinksErrors[keyof GetSkillShareLinksErrors];
+
+export type GetSkillShareLinksResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        links: Array<{
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetSkillShareLinksResponse = GetSkillShareLinksResponses[keyof GetSkillShareLinksResponses];
+
+export type CreateSkillShareLinkData = {
+    body: {
+        skillIds: Array<string>;
+        name?: string;
+        expiresAt?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/skill-share-links';
+};
+
+export type CreateSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSkillShareLinkError = CreateSkillShareLinkErrors[keyof CreateSkillShareLinkErrors];
+
+export type CreateSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        link: {
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        };
+        rawToken: string;
+        cloneUrl: string;
+        marketplaceName: string;
+    };
+};
+
+export type CreateSkillShareLinkResponse = CreateSkillShareLinkResponses[keyof CreateSkillShareLinkResponses];
+
+export type RevokeSkillShareLinkData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skill-share-links/{id}';
+};
+
+export type RevokeSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RevokeSkillShareLinkError = RevokeSkillShareLinkErrors[keyof RevokeSkillShareLinkErrors];
+
+export type RevokeSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type RevokeSkillShareLinkResponse = RevokeSkillShareLinkResponses[keyof RevokeSkillShareLinkResponses];
 
 export type GetTeamStatisticsData = {
     body?: never;
@@ -49655,6 +53594,7 @@ export type GetToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -49978,7 +53918,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted'>;
     };
 };
 

@@ -2,6 +2,7 @@
 
 import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -11,9 +12,16 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
-import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const MermaidDiagram = dynamic(
+  async () => {
+    const module = await import("@/components/mermaid-diagram");
+    return module.MermaidDiagram;
+  },
+  { ssr: false },
+);
 
 interface ConversationArtifactPanelProps {
   artifact?: string | null;
@@ -22,6 +30,8 @@ interface ConversationArtifactPanelProps {
   className?: string;
   /** When true, the panel fills its container and doesn't manage its own width/resize */
   embedded?: boolean;
+  /** When true, hide the panel's own title + close button (the parent already provides them) */
+  hideHeader?: boolean;
 }
 
 export function ConversationArtifactPanel({
@@ -30,6 +40,7 @@ export function ConversationArtifactPanel({
   onToggle,
   className,
   embedded = false,
+  hideHeader = false,
 }: ConversationArtifactPanelProps) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -87,6 +98,54 @@ export function ConversationArtifactPanel({
     // Drop ReactMarkdown's default <pre>; CodeBlock renders its own wrapper for fenced code.
     pre({ children }) {
       return <>{children}</>;
+    },
+    table({ node, className, children, ...props }) {
+      return (
+        <div className="my-4 max-h-[420px] w-full overflow-auto rounded-md border border-border">
+          <table
+            className={cn(
+              "w-full min-w-max border-collapse text-sm",
+              className,
+            )}
+            {...props}
+          >
+            {children}
+          </table>
+        </div>
+      );
+    },
+    thead({ node, className, children, ...props }) {
+      return (
+        <thead className={cn("bg-muted", className)} {...props}>
+          {children}
+        </thead>
+      );
+    },
+    th({ node, className, children, ...props }) {
+      return (
+        <th
+          className={cn(
+            "sticky top-0 z-10 border-r border-b border-border bg-muted px-3 py-2 text-left font-semibold last:border-r-0",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </th>
+      );
+    },
+    td({ node, className, children, ...props }) {
+      return (
+        <td
+          className={cn(
+            "border-r border-b border-border px-3 py-2 align-top last:border-r-0",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </td>
+      );
     },
     code({ node, className, children, ...props }) {
       const match = /language-(\w+)/.exec(className || "");
@@ -365,11 +424,15 @@ export function ConversationArtifactPanel({
       )}
 
       {/* Panel header */}
-      <div className="border-b px-2 pr-1 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-medium text-xs">Conversation Artifact</h3>
-        </div>
+      <div className="border-b px-2 pr-1 py-1 flex items-center justify-between">
+        {hideHeader ? (
+          <div />
+        ) : (
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-medium text-xs">Conversation Artifact</h3>
+          </div>
+        )}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -389,15 +452,17 @@ export function ConversationArtifactPanel({
           >
             <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={onToggle}
-            title="Close panel"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+          {!hideHeader && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onToggle}
+              title="Close panel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -405,7 +470,7 @@ export function ConversationArtifactPanel({
       <div className="flex-1 overflow-y-auto">
         <div ref={contentRef} className="px-6 py-4 max-w-none h-full">
           {artifact ? (
-            <div className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2 [&_li]:my-1 [&_li>p]:inline [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-2 [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:border [&_table]:border-border [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:bg-muted [&_th]:font-semibold [&_thead]:bg-muted">
+            <div className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:list-inside [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2 [&_li]:my-1 [&_li>p]:inline [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-2 [&_code]:bg-muted [&_code]:text-foreground [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={markdownComponents}

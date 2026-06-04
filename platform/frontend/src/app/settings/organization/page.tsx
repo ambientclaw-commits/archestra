@@ -28,6 +28,7 @@ import {
   validateChatLink,
 } from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
+import { ConnectSettingsSection } from "./_components/connect-settings-section";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { LogosSection } from "./_components/logos-section";
 import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
@@ -38,6 +39,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SiteNotificationsSection } from "./_components/site-notifications-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
 export default function OrganizationSettingsPage() {
@@ -404,7 +406,14 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <SiteNotificationsSection />
         </SettingsSectionStack>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-medium mb-4">Connect page</h3>
+        <ConnectSettingsSection />
       </div>
 
       {/* Auth Section */}

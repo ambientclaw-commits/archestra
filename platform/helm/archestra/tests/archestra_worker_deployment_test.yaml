@@ -4,6 +4,14 @@ templates:
 values:
   - ../ci/test-values.yaml
 tests:
+  - it: omits the worker deployment when maintenance mode is enabled
+    set:
+      archestra.env:
+        ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: worker deployment has default resources configured
     asserts:
       - equal:
@@ -115,6 +123,21 @@ tests:
             name: diagnostics
             mountPath: /var/diagnostics
             readOnly: false
+
+  - it: worker receives code runtime environment variables when enabled
+    set:
+      archestra.codeRuntime.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
 
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:

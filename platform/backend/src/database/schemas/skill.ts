@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -8,15 +10,17 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSourceType } from "@/types/skill";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import usersTable from "./user";
 
 /**
  * Agent Skills: reusable SKILL.md instruction sets.
  *
- * A skill is an organization-level resource. It holds the catalog metadata
+ * A skill belongs to an organization and carries a visibility `scope`
+ * (`personal`/`team`/`org`) like agents. It holds the catalog metadata
  * (`name`/`description`, surfaced to the model) plus the SKILL.md markdown
  * body (`content`, loaded on activation). Bundled resource files live in the
- * `skill_files` table; agent attachments live in `agent_skill`.
+ * `skill_files` table; team assignments live in `skill_team`.
  *
  * @see https://agentskills.io/specification
  */
@@ -29,6 +33,15 @@ const skillsTable = pgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * Visibility/management scope: `personal` (author only), `team` (members of
+     * the assigned teams, see `skill_team`), or `org` (everyone). Mirrors the
+     * `agents.scope` model.
+     */
+    scope: text("scope")
+      .$type<ResourceVisibilityScope>()
+      .notNull()
+      .default("personal"),
     /** Short identifier surfaced in the skill catalog. */
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
@@ -39,6 +52,19 @@ const skillsTable = pgTable(
     license: text("license"),
     /** Optional `compatibility` frontmatter field (environment requirements). */
     compatibility: text("compatibility"),
+    /**
+     * Optional `allowed-tools` frontmatter field (agentskills.io): a
+     * space-separated list of tools the skill is pre-approved to use. Populated
+     * from the source agent's tools on conversion; round-trips through SKILL.md.
+     */
+    allowedTools: text("allowed_tools"),
+    /**
+     * When true, the SKILL.md body is rendered through Handlebars (with the
+     * activating user's context) at activation, like an agent system prompt.
+     * Set automatically when converting a templated agent; off for authored
+     * skills unless they opt in via the `templated` frontmatter field.
+     */
+    templated: boolean("templated").notNull().default(false),
     /** Optional arbitrary `metadata` frontmatter map. */
     metadata: jsonb("metadata")
       .$type<Record<string, string>>()
@@ -61,7 +87,17 @@ const skillsTable = pgTable(
   },
   (table) => [
     index("skills_organization_id_idx").on(table.organizationId),
-    uniqueIndex("skills_org_name_idx").on(table.organizationId, table.name),
+    index("skills_scope_idx").on(table.scope),
+    // Name uniqueness mirrors visibility: a name only needs to be unique among
+    // those who can see the skill. Personal skills are visible to their author
+    // alone, so they are unique per (org, author); team/org skills are shared,
+    // so they are unique per org to keep activation by name unambiguous.
+    uniqueIndex("skills_org_personal_name_idx")
+      .on(table.organizationId, table.authorId, table.name)
+      .where(sql`${table.scope} = 'personal'`),
+    uniqueIndex("skills_org_shared_name_idx")
+      .on(table.organizationId, table.name)
+      .where(sql`${table.scope} in ('team', 'org')`),
   ],
 );
 

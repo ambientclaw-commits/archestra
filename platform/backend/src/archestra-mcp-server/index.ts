@@ -7,10 +7,15 @@ import {
   isAgentTool,
 } from "@shared";
 import { ZodError, type ZodType } from "zod";
+import config from "@/config";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
+import {
+  toolEntries as codeExecutionToolEntries,
+  tools as codeExecutionTools,
+} from "./code-execution";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import {
   type ArchestraRuntimeToolEntry,
@@ -51,6 +56,10 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
+import {
+  toolEntries as skillSandboxToolEntries,
+  tools as skillSandboxTools,
+} from "./skill-sandbox";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import {
   toolEntries as toolAssignmentToolEntries,
@@ -78,7 +87,9 @@ const toolEntries: Partial<
   ...chatToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
+  ...codeExecutionToolEntries,
   ...skillToolEntries,
+  ...skillSandboxToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -95,7 +106,9 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
+    ...(config.codeRuntime.enabled ? codeExecutionTools : []),
     ...skillTools,
+    ...(config.skillsSandbox.enabled ? skillSandboxTools : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

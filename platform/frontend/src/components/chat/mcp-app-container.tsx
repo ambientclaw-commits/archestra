@@ -14,9 +14,19 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
 } from "@shared";
+import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -263,6 +273,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   toolName,
+  toolCallId,
   toolInput,
   rawOutput,
   preloadedResource,
@@ -272,6 +283,8 @@ export function McpAppSection({
   agentId: string;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
   toolName: string;
+  /** Stable identifier for this canvas, used to pin it to the sidebar. */
+  toolCallId?: string;
   toolInput?: Record<string, unknown>;
   rawOutput: McpToolOutput | undefined;
   /** HTML pre-fetched by the backend and delivered via SSE — skips the in-browser HTTP fetch */
@@ -279,10 +292,36 @@ export function McpAppSection({
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
   onSendMessage?: (text: string) => void;
 }) {
+  const resourceKey = `${agentId}:${uiResourceUri}`;
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+  const [resourceState, setResourceState] = useState<{
+    key: string;
+    state: "unknown" | "renderable" | "empty";
+  }>(() => ({
+    key: resourceKey,
+    state: preloadedResource
+      ? isRenderableMcpAppHtml(preloadedResource.html)
+        ? "renderable"
+        : "empty"
+      : "unknown",
+  }));
+  const effectiveResourceState =
+    resourceState.key === resourceKey ? resourceState.state : "unknown";
+
+  const { selectedCanvasId, select, showInSidebar, portalTarget } =
+    usePinnedCanvas();
+
+  const parsedToolName = parseFullToolName(toolName);
+  const shortToolName = parsedToolName.toolName ?? toolName;
+  const isSelected = !!toolCallId && selectedCanvasId === toolCallId;
+  const sidebarHostingActive = portalTarget !== null;
+  // When the sidebar canvas tab is open, every inline canvas is replaced by a
+  // placeholder; only the *selected* canvas's iframe lives in the sidebar.
+  const renderInSidebar = sidebarHostingActive && isSelected;
+  const renderPlaceholder = sidebarHostingActive;
 
   // Reconstruct McpCallToolResult for AppFrame
   const toolResult = useMemo((): McpCallToolResult | undefined => {
@@ -297,12 +336,37 @@ export function McpAppSection({
     };
   }, [rawOutput]);
 
-  return (
+  const handleSelect = () => {
+    if (!toolCallId) return;
+    select(toolCallId);
+  };
+
+  const handleShowInSidebar = () => {
+    if (!toolCallId) return;
+    showInSidebar(toolCallId);
+  };
+
+  const handleResourceStateChange = useCallback(
+    (state: "renderable" | "empty") => {
+      setResourceState({ key: resourceKey, state });
+    },
+    [resourceKey],
+  );
+
+  if (effectiveResourceState === "empty") {
+    return null;
+  }
+
+  const canvas = (
     <McpAppErrorBoundary>
       <McpAppContainer
         displayMode={displayMode}
         onClose={() => setDisplayMode("inline")}
         size={size}
+        onShowInSidebar={
+          toolCallId && !renderInSidebar ? handleShowInSidebar : undefined
+        }
+        fillContainer={renderInSidebar}
       >
         <McpAppView
           toolResourceUri={uiResourceUri}
@@ -314,10 +378,67 @@ export function McpAppSection({
           toolInput={toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
+          onResourceStateChange={handleResourceStateChange}
           onSendMessage={onSendMessage}
         />
       </McpAppContainer>
     </McpAppErrorBoundary>
+  );
+
+  if (renderPlaceholder) {
+    return (
+      <>
+        <SidebarCanvasPlaceholder
+          label={shortToolName}
+          isSelected={isSelected}
+          onSelect={handleSelect}
+        />
+        {renderInSidebar && portalTarget && createPortal(canvas, portalTarget)}
+      </>
+    );
+  }
+
+  return canvas;
+}
+
+function SidebarCanvasPlaceholder({
+  label,
+  isSelected,
+  onSelect,
+}: {
+  label: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-dashed bg-muted/30 p-3 flex items-center justify-between gap-2 text-xs",
+        isSelected
+          ? "border-primary/50 text-foreground"
+          : "border-border text-muted-foreground",
+      )}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate font-medium">{label}</span>
+      </div>
+      {isSelected && (
+        <span className="h-7 flex items-center px-3 text-xs text-primary shrink-0">
+          Showing in sidebar
+        </span>
+      )}
+      {!isSelected && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs shrink-0"
+          onClick={onSelect}
+        >
+          Show in sidebar
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -335,11 +456,17 @@ function McpAppContainer({
   onClose,
   children,
   size,
+  onShowInSidebar,
+  fillContainer = false,
 }: {
   displayMode: McpUiDisplayMode;
   onClose: () => void;
   children: React.ReactNode;
   size: { width: number; height: number } | null;
+  /** Inline-mode action: send this canvas to the sidebar. */
+  onShowInSidebar?: () => void;
+  /** When true, the canvas fills its parent container (used when portaled to sidebar). */
+  fillContainer?: boolean;
 }) {
   const isFullscreen = displayMode === "fullscreen";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -389,8 +516,9 @@ function McpAppContainer({
     <div
       ref={containerRef}
       className={cn(
-        "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
+        "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group",
         isFullscreen ? "fixed z-[100] bg-background flex flex-col" : "",
+        fillContainer && !isFullscreen ? "h-full flex flex-col" : "",
         isFullscreen && !bounds
           ? "opacity-0 scale-95 pointer-events-none"
           : "opacity-100 scale-100",
@@ -406,51 +534,76 @@ function McpAppContainer({
           : undefined
       }
     >
-      {/* Close bar — animates in smoothly instead of snapping */}
-      <div
-        className={cn(
-          "flex items-center justify-end border-b transition-all duration-300 overflow-hidden",
-          isFullscreen
-            ? "h-12 p-2 opacity-100"
-            : "h-0 p-0 opacity-0 border-transparent",
-        )}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          aria-label="Exit fullscreen"
+      {/* Top toolbar — collapses to 0 height when there are no actions to show. */}
+      {(isFullscreen || onShowInSidebar) && (
+        <div
+          className={cn(
+            "flex items-center justify-end gap-1 transition-all duration-300 overflow-hidden",
+            isFullscreen
+              ? "h-12 p-2 border-b opacity-100"
+              : fillContainer
+                ? "h-8 p-1 border-b opacity-100"
+                : "absolute top-1 right-1 z-10 h-7",
+          )}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M18 6 6 18" />
-            <path d="m6 6 12 12" />
-          </svg>
-        </Button>
-      </div>
+          {onShowInSidebar && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={onShowInSidebar}
+              aria-label="Show in sidebar"
+              title="Show in sidebar"
+            >
+              Show in sidebar
+            </Button>
+          )}
+          {isFullscreen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="Exit fullscreen"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </Button>
+          )}
+        </div>
+      )}
 
       <div
-        style={{
-          maxHeight: isFullscreen
-            ? `${bounds?.height || 1000}px`
-            : `${Math.min(size?.height || 150, 500)}px`,
-        }}
+        style={
+          fillContainer && !isFullscreen
+            ? undefined
+            : {
+                maxHeight: isFullscreen
+                  ? `${bounds?.height || 1000}px`
+                  : `${Math.min(size?.height || 150, 500)}px`,
+              }
+        }
         className={cn(
           "transition-[max-height] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]",
           isFullscreen
-            ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&_div]:!h-full"
-            : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
+            ? "flex-1 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
+            : fillContainer
+              ? "flex-1 min-h-0 overflow-hidden [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-h-0 [&_iframe]:!max-h-none [&>div]:!h-full"
+              : "max-w-[80%] shadow-xs border border-border/50 rounded-lg [&_iframe]:!w-full overflow-y-hidden [&_div]:!max-h-none",
         )}
       >
         {children}
@@ -660,6 +813,7 @@ const McpAppView = function McpAppView({
   onError,
   onSendMessage,
   preloadedResource,
+  onResourceStateChange,
 }: {
   toolResourceUri: string;
   agentId: string;
@@ -675,6 +829,7 @@ const McpAppView = function McpAppView({
   onSendMessage?: (text: string) => void;
   /** HTML pre-fetched by the backend — skips the in-browser HTTP fetch to avoid SSE deadlock */
   preloadedResource?: AppResourceMeta;
+  onResourceStateChange: (state: "renderable" | "empty") => void;
 }) {
   const { resolvedTheme } = useTheme();
   const [bridge, setBridge] = useState<AppBridge | null>(null);
@@ -696,6 +851,8 @@ const McpAppView = function McpAppView({
   onSizeChangeRef.current = onSizeChange;
   const onSendMessageRef = useRef(onSendMessage);
   onSendMessageRef.current = onSendMessage;
+  const onResourceStateChangeRef = useRef(onResourceStateChange);
+  onResourceStateChangeRef.current = onResourceStateChange;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -876,7 +1033,14 @@ const McpAppView = function McpAppView({
 
     // Skip HTTP fetch when the backend already sent the HTML via SSE.
     if (preloadedResource) {
-      if (!cancelled) setAppResource(preloadedResource);
+      if (!cancelled) {
+        setAppResource(preloadedResource);
+        onResourceStateChangeRef.current(
+          isRenderableMcpAppHtml(preloadedResource.html)
+            ? "renderable"
+            : "empty",
+        );
+      }
       return () => {
         cancelled = true;
         appBridge.teardownResource({}).catch(() => {});
@@ -912,11 +1076,15 @@ const McpAppView = function McpAppView({
 
         if (!cancelled && !fetchCancelledRef.current) {
           setAppResource({ html, csp, permissions });
+          onResourceStateChangeRef.current(
+            isRenderableMcpAppHtml(html) ? "renderable" : "empty",
+          );
         }
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
           setLoadError(error.message);
+          onResourceStateChangeRef.current("renderable");
           onErrorRef.current?.(error);
         }
       }
@@ -937,6 +1105,9 @@ const McpAppView = function McpAppView({
     if (preloadedResource && !appResource && !loadError) {
       fetchCancelledRef.current = true;
       setAppResource(preloadedResource);
+      onResourceStateChangeRef.current(
+        isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
+      );
     }
   }, [preloadedResource, appResource, loadError]);
 
@@ -1054,3 +1225,50 @@ const McpAppView = function McpAppView({
     </div>
   );
 };
+
+/**
+ * Detects MCP App resources that would create an empty iframe/canvas panel.
+ * Tool results can mark a UI resource even when that resource has no visible
+ * body content; rendering it reserves a blank chat panel before the next
+ * message or sensitive-context divider. Keep resources that can still render
+ * later through scripts or visual/interactive elements.
+ */
+function isRenderableMcpAppHtml(html: string): boolean {
+  const trimmedHtml = html.trim();
+  if (!trimmedHtml) {
+    return false;
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(trimmedHtml, "text/html");
+  const body = document.body;
+
+  if (body.textContent?.trim()) {
+    return true;
+  }
+
+  return Boolean(
+    body.querySelector(
+      [
+        "script",
+        "canvas",
+        "svg",
+        "img",
+        "picture",
+        "video",
+        "audio",
+        "iframe",
+        "object",
+        "embed",
+        "table",
+        "form",
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "[role]",
+        "[aria-label]",
+      ].join(","),
+    ),
+  );
+}

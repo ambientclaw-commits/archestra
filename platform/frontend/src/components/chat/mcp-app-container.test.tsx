@@ -122,6 +122,37 @@ describe("McpAppSection", () => {
 
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
+
+  it("does not reserve a canvas panel for empty static app HTML", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+        />,
+      );
+    });
+
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("keeps script-driven app HTML because it may render after initialization", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body><script>document.body.textContent = 'loaded'</script></body></html>",
+          }}
+        />,
+      );
+    });
+
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+  });
 });
 
 describe("McpAppContainer (via McpAppSection)", () => {
@@ -139,12 +170,10 @@ describe("McpAppContainer (via McpAppSection)", () => {
       );
     });
 
-    // In inline mode the close button is in the DOM but its container is
-    // collapsed (h-0 opacity-0) — it is not visually present.
-    const closeButton = screen.getByRole("button", {
-      name: /exit fullscreen/i,
-    });
-    expect(closeButton.parentElement).toHaveClass("h-0", "opacity-0");
+    // The Exit-fullscreen button only mounts while in fullscreen mode.
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows close button after switching to fullscreen mode", async () => {
@@ -206,7 +235,7 @@ describe("McpAppContainer (via McpAppSection)", () => {
       screen.getByRole("button", { name: /exit fullscreen/i }),
     ).toBeInTheDocument();
 
-    // Clicking it should return to inline mode (close bar collapses)
+    // Clicking it should return to inline mode (close button unmounts)
     const closeButton = screen.getByRole("button", {
       name: /exit fullscreen/i,
     });
@@ -214,7 +243,9 @@ describe("McpAppContainer (via McpAppSection)", () => {
       await user.click(closeButton);
     });
 
-    expect(closeButton.parentElement).toHaveClass("h-0", "opacity-0");
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
   });
 });
 

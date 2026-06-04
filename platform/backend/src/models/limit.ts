@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -9,6 +10,7 @@ import type {
   LimitType,
   UpdateLimit,
 } from "@/types";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ModelModel from "./model";
 
@@ -32,11 +34,27 @@ type LimitsCleanupIntervalSqlLiteral =
   | "24 hours"
   | "1 week"
   | "1 month";
+type RollingLimitCleanupInterval = Extract<
+  LimitCleanupInterval,
+  "1h" | "12h" | "24h" | "1w" | "1m"
+>;
+
+type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
+type LimitViolationResponse = [
+  refusalMessage: string,
+  contentMessage: string,
+  metadata?: {
+    entityType: LimitEntityType;
+    limitType: "token_cost";
+  },
+];
+
+const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "calendar_month";
 
 class LimitModel {
-  // limitsCleanupIntervalSqlLiterals exists basically to compile-time check set of literals
-  static readonly limitsCleanupIntervalSqlLiterals: Record<
-    LimitCleanupInterval,
+  // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
+  static readonly rollingCleanupIntervalSqlLiterals: Record<
+    RollingLimitCleanupInterval,
     LimitsCleanupIntervalSqlLiteral
   > = {
     "1h": "1 hour",
@@ -51,7 +69,10 @@ class LimitModel {
   static async create(data: CreateLimit): Promise<Limit> {
     const [limit] = await db
       .insert(schema.limitsTable)
-      .values(data)
+      .values({
+        ...data,
+        cleanupInterval: data.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+      })
       .returning();
 
     // For token_cost limits, initialize model usage records
@@ -141,38 +162,12 @@ class LimitModel {
   ): Promise<
     Array<{ model: string; tokensIn: number; tokensOut: number; cost: number }>
   > {
-    // Get the model usage records
     const modelUsages = await db
       .select()
       .from(schema.limitModelUsageTable)
       .where(eq(schema.limitModelUsageTable.limitId, limitId));
 
-    // Calculate cost for each model
-    const breakdown = await Promise.all(
-      modelUsages.map(async (usage) => {
-        // Look up model by modelId only — limit usage records don't store provider
-        const modelEntry = await ModelModel.findByModelIdOnly(usage.model);
-        const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
-
-        const inputCost =
-          (usage.currentUsageTokensIn *
-            parseFloat(pricing.pricePerMillionInput)) /
-          1_000_000;
-        const outputCost =
-          (usage.currentUsageTokensOut *
-            parseFloat(pricing.pricePerMillionOutput)) /
-          1_000_000;
-
-        return {
-          model: usage.model,
-          tokensIn: usage.currentUsageTokensIn,
-          tokensOut: usage.currentUsageTokensOut,
-          cost: inputCost + outputCost,
-        };
-      }),
-    );
-
-    return breakdown;
+    return (await calculateModelUsageCosts(modelUsages)).breakdown;
   }
 
   /**
@@ -228,11 +223,42 @@ class LimitModel {
       patchData.model = null;
     }
 
-    const [limit] = await db
-      .update(schema.limitsTable)
-      .set(patchData)
-      .where(eq(schema.limitsTable.id, id))
-      .returning();
+    const [limit] = await db.transaction(async (tx) => {
+      const [existingLimit] = await tx
+        .select()
+        .from(schema.limitsTable)
+        .where(eq(schema.limitsTable.id, id))
+        .limit(1);
+
+      if (!existingLimit) {
+        return [];
+      }
+
+      const shouldResetUsage =
+        patchData.cleanupInterval !== undefined &&
+        patchData.cleanupInterval !== existingLimit.cleanupInterval;
+      const limitPatchData = shouldResetUsage
+        ? { ...patchData, lastCleanup: sql`now()` }
+        : patchData;
+
+      const updatedLimits = await tx
+        .update(schema.limitsTable)
+        .set(limitPatchData)
+        .where(eq(schema.limitsTable.id, id))
+        .returning();
+
+      if (shouldResetUsage) {
+        await tx
+          .update(schema.limitModelUsageTable)
+          .set({
+            currentUsageTokensIn: 0,
+            currentUsageTokensOut: 0,
+          })
+          .where(eq(schema.limitModelUsageTable.limitId, id));
+      }
+
+      return updatedLimits;
+    });
 
     return limit || null;
   }
@@ -474,7 +500,7 @@ class LimitModel {
       return;
     }
 
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       const limits = await tx
         .update(schema.limitsTable)
         .set({ lastCleanup: now, updatedAt: now })
@@ -526,6 +552,111 @@ class LimitModel {
 
     return limits;
   }
+
+  // Org-scoped audit snapshot via the entity FK.  limitsTable has no
+  // organizationId column of its own, so tenancy is resolved through the
+  // entity that owns the limit (organization/team/agent/user/virtual_key).
+  //
+  // The route handler for PATCH/DELETE /api/limits/:id does not enforce this
+  // predicate today, but the audit fetcher must — the preHandler runs before
+  // route authz, so an unscoped fetch would write another tenant's limit row
+  // into the caller's audit_logs even when the route ultimately rejects the
+  // request.  Returns null whenever the limit does not belong to the caller's
+  // organization.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.limitsTable)
+      .where(eq(schema.limitsTable.id, id))
+      .limit(1);
+
+    if (!row) return null;
+
+    const inOrg = await LimitModel.isEntityInOrganization(
+      row.entityType,
+      row.entityId,
+      organizationId,
+    );
+    if (!inOrg) return null;
+
+    return {
+      id: row.id,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      limitType: row.limitType,
+      limitValue: row.limitValue,
+      mcpServerName: row.mcpServerName ?? null,
+      toolName: row.toolName ?? null,
+      model: row.model ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Verify that a limit's entity (the row identified by `entityType` and
+   * `entityId`) belongs to `organizationId`.  Each entity type lives in a
+   * different table, so the FK path differs per branch.  Used by the
+   * snapshot-before-authz scope predicate in `findByIdForAudit`.
+   */
+  private static async isEntityInOrganization(
+    entityType: LimitEntityType,
+    entityId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    switch (entityType) {
+      case "organization":
+        return entityId === organizationId;
+      case "team": {
+        const [hit] = await db
+          .select({ id: schema.teamsTable.id })
+          .from(schema.teamsTable)
+          .where(
+            and(
+              eq(schema.teamsTable.id, entityId),
+              eq(schema.teamsTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+      case "agent": {
+        return AgentModel.existsInOrganization({
+          id: entityId,
+          organizationId,
+        });
+      }
+      case "user": {
+        const [hit] = await db
+          .select({ id: schema.membersTable.id })
+          .from(schema.membersTable)
+          .where(
+            and(
+              eq(schema.membersTable.userId, entityId),
+              eq(schema.membersTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+      case "virtual_key": {
+        const [hit] = await db
+          .select({ id: schema.virtualApiKeysTable.id })
+          .from(schema.virtualApiKeysTable)
+          .where(
+            and(
+              eq(schema.virtualApiKeysTable.id, entityId),
+              eq(schema.virtualApiKeysTable.organizationId, organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
+    }
+  }
 }
 
 /**
@@ -535,45 +666,39 @@ class LimitModel {
 export class LimitValidationService {
   /**
    * Check if current usage has already exceeded any token cost limits
-   * Returns null if allowed, or [refusalMessage, contentMessage] if blocked
+   * Returns null if allowed, or a refusal tuple if blocked.
    */
   static async checkLimitsBeforeRequest(params: {
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
-  }): Promise<null | [string, string]> {
+  }): Promise<null | LimitViolationResponse> {
     const { agentId, userId, virtualKeyId } = params;
 
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
       // Get agent's teams to cleanup and check team and organization limits
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-      logger.info(
+      logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
 
       // Get organization ID to cleanup and check organization limits (either from teams or fallback)
       let organizationId: string | null = null;
+      let agentTeams: (typeof schema.teamsTable.$inferSelect)[] = [];
       if (agentTeamIds.length > 0) {
-        const teams = await db
+        agentTeams = await db
           .select()
           .from(schema.teamsTable)
           .where(inArray(schema.teamsTable.id, agentTeamIds));
-        if (teams.length > 0 && teams[0].organizationId) {
-          organizationId = teams[0].organizationId;
+        if (agentTeams.length > 0 && agentTeams[0].organizationId) {
+          organizationId = agentTeams[0].organizationId;
         }
       } else {
-        const [agent] = await db
-          .select({ organizationId: schema.agentsTable.organizationId })
-          .from(schema.agentsTable)
-          .where(eq(schema.agentsTable.id, agentId))
-          .limit(1);
-        if (agent?.organizationId) {
-          organizationId = agent.organizationId;
-        }
+        organizationId = await AgentModel.findOrganizationId(agentId);
       }
 
       const entities: LimitsCleanupOptionsEntities = {
@@ -592,11 +717,11 @@ export class LimitValidationService {
         entities.organization = organizationId;
       }
 
-      logger.info({ entities }, `[LimitValidation] Running limits cleanup`);
+      logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
       await LimitModel.cleanupLimitsIfNeeded({ entities });
 
       if (virtualKeyId) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
         );
         const vkLimitViolation = await LimitValidationService.checkEntityLimits(
@@ -609,13 +734,13 @@ export class LimitValidationService {
           );
           return vkLimitViolation;
         }
-        logger.info(
+        logger.debug(
           `[LimitValidation] Virtual-key-level limits OK for: ${virtualKeyId}`,
         );
       }
 
       if (userId) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking user-level limits for: ${userId}`,
         );
         const userLimitViolation =
@@ -639,10 +764,10 @@ export class LimitValidationService {
             return defaultUserLimitViolation;
           }
         }
-        logger.info(`[LimitValidation] User-level limits OK for: ${userId}`);
+        logger.debug(`[LimitValidation] User-level limits OK for: ${userId}`);
       }
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
       const agentLimitViolation =
@@ -653,23 +778,19 @@ export class LimitValidationService {
         );
         return agentLimitViolation;
       }
-      logger.info(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
+      logger.debug(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
 
       // Check team-level limits
       if (agentTeamIds.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking team-level limits for agent: ${agentId}`,
         );
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-        logger.info(
-          `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
+        logger.debug(
+          `[LimitValidation] Found ${agentTeams.length} teams for agent ${agentId}: ${agentTeams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );
 
-        for (const team of teams) {
-          logger.info(
+        for (const team of agentTeams) {
+          logger.debug(
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
           const teamLimitViolation =
@@ -680,31 +801,31 @@ export class LimitValidationService {
             );
             return teamLimitViolation;
           }
-          logger.info(
+          logger.debug(
             `[LimitValidation] Team-level limits OK for team: ${team.id}`,
           );
         }
+      }
 
-        // Check organization-level limits
-        if (organizationId) {
-          logger.info(
-            `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+      // Check organization-level limits for any agent with a resolvable org.
+      if (organizationId) {
+        logger.debug(
+          `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+        );
+        const orgLimitViolation =
+          await LimitValidationService.checkEntityLimits(
+            "organization",
+            organizationId,
           );
-          const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              organizationId,
-            );
-          if (orgLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
-            );
-            return orgLimitViolation;
-          }
+        if (orgLimitViolation) {
           logger.info(
-            `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+            `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
           );
+          return orgLimitViolation;
         }
+        logger.debug(
+          `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+        );
       }
 
       logger.info(
@@ -726,9 +847,9 @@ export class LimitValidationService {
   private static async checkEntityLimits(
     entityType: LimitEntityType,
     entityId: string,
-  ): Promise<null | [string, string]> {
+  ): Promise<null | LimitViolationResponse> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
       );
       const limits = await LimitModel.findLimitsForValidation(
@@ -737,25 +858,25 @@ export class LimitValidationService {
         "token_cost",
       );
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,
       );
 
       if (limits.length === 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] No token_cost limits found for ${entityType} ${entityId} - allowing`,
         );
         return null;
       }
 
       for (const limit of limits) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
         // For token_cost limits, convert tokens to actual cost using token prices
         let comparisonValue = 0;
-        let limitDescription = "tokens";
+        let limitDescription: "tokens" | "cost_dollars" = "tokens";
         let totalTokensIn = 0;
         let totalTokensOut = 0;
 
@@ -773,44 +894,20 @@ export class LimitValidationService {
               );
               comparisonValue = 0;
             } else {
-              let totalCost = 0;
-
-              for (const usage of modelUsages) {
-                // Track total tokens for metadata
-                totalTokensIn += usage.currentUsageTokensIn;
-                totalTokensOut += usage.currentUsageTokensOut;
-
-                // Look up model by modelId only — limit usage records don't store provider
-                const modelEntry = await ModelModel.findByModelIdOnly(
-                  usage.model,
-                );
-                const pricing = ModelModel.getEffectivePricing(
-                  modelEntry,
-                  usage.model,
-                );
-
-                const inputCost =
-                  (usage.currentUsageTokensIn *
-                    parseFloat(pricing.pricePerMillionInput)) /
-                  1000000;
-                const outputCost =
-                  (usage.currentUsageTokensOut *
-                    parseFloat(pricing.pricePerMillionOutput)) /
-                  1000000;
-                const modelCost = inputCost + outputCost;
-
-                totalCost += modelCost;
-
+              const usageCosts = await calculateModelUsageCosts(modelUsages);
+              for (const usage of usageCosts.breakdown) {
                 logger.debug(
-                  `[LimitValidation] Model ${usage.model}: ${usage.currentUsageTokensIn} in + ${usage.currentUsageTokensOut} out = $${modelCost.toFixed(2)}`,
+                  `[LimitValidation] Model ${usage.model}: ${usage.tokensIn} in + ${usage.tokensOut} out = $${usage.cost.toFixed(2)}`,
                 );
               }
 
-              comparisonValue = totalCost;
+              totalTokensIn = usageCosts.tokensIn;
+              totalTokensOut = usageCosts.tokensOut;
+              comparisonValue = usageCosts.cost;
               limitDescription = "cost_dollars";
 
               logger.debug(
-                `[LimitValidation] Total cost for limit ${limit.id}: $${totalCost.toFixed(2)} across ${modelUsages.length} models`,
+                `[LimitValidation] Total cost for limit ${limit.id}: $${usageCosts.cost.toFixed(2)} across ${modelUsages.length} models`,
               );
             }
           } catch (error) {
@@ -825,47 +922,17 @@ export class LimitValidationService {
             `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
           );
 
-          // Calculate remaining based on the comparison type (tokens vs dollars)
-          const remaining = Math.max(0, limit.limitValue - comparisonValue);
-          const totalTokens = totalTokensIn + totalTokensOut;
-
-          // For metadata, use token counts for programmatic access
-          const archestraMetadata = `
-<archestra-limit-type>token_cost</archestra-limit-type>
-<archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
-<archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
-<archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
-<archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, limit.limitValue - totalTokens)}</archestra-limit-remaining>`;
-
-          // For user message, use appropriate units based on limit type
-          let contentMessage: string;
-          if (limitDescription === "cost_dollars") {
-            contentMessage = `
-I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
-
-Current usage: $${comparisonValue.toFixed(2)}
-Limit: $${limit.limitValue.toFixed(2)}
-Remaining: $${remaining.toFixed(2)}
-
-Please contact your administrator to increase the limit or wait for the usage to reset.`;
-          } else {
-            contentMessage = `
-I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
-
-Current usage: ${totalTokens.toLocaleString()} tokens
-Limit: ${limit.limitValue.toLocaleString()} tokens
-Remaining: ${Math.max(0, limit.limitValue - totalTokens).toLocaleString()} tokens
-
-Please contact your administrator to increase the limit or wait for the usage to reset.`;
-          }
-
-          const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
-
-          return [refusalMessage, contentMessage];
+          return buildLimitViolationResponse({
+            entityType,
+            entityId,
+            limitValue: limit.limitValue,
+            comparisonValue,
+            limitDescription,
+            totalTokensIn,
+            totalTokensOut,
+          });
         } else {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
           );
         }
@@ -886,7 +953,7 @@ ${contentMessage}`;
   private static async checkDefaultUserLimit(params: {
     organizationId: string;
     userId: string;
-  }): Promise<null | [string, string]> {
+  }): Promise<null | LimitViolationResponse> {
     try {
       const [organization] = await db
         .select({
@@ -921,7 +988,9 @@ ${contentMessage}`;
         organizationId: params.organizationId,
         userId: params.userId,
         models: normalizeLimitModels(organization.defaultUserLimitModel),
-        cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
+        cleanupInterval:
+          organization.defaultUserLimitCleanupInterval ??
+          DEFAULT_LIMIT_CLEANUP_INTERVAL,
       });
 
       if (usage.cost < organization.defaultUserLimitValue) {
@@ -947,6 +1016,15 @@ ${contentMessage}`;
   }
 }
 
+const calendarCleanupIntervals = [
+  "calendar_day",
+  "calendar_week_sunday",
+  "calendar_week_monday",
+  "calendar_month",
+] as const satisfies readonly LimitCleanupInterval[];
+
+type CalendarLimitCleanupInterval = (typeof calendarCleanupIntervals)[number];
+
 function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
   return or(
     and(
@@ -967,6 +1045,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.agentsTable}
         WHERE ${schema.agentsTable.id}::text = ${schema.limitsTable.entityId}
           AND ${schema.agentsTable.organizationId} = ${organizationId}
+          AND ${schema.agentsTable.deletedAt} IS NULL
       )`,
     ),
     and(
@@ -990,7 +1069,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
 
 function buildCleanupDueCondition(): SQL {
   const intervalConditions = Object.entries(
-    LimitModel.limitsCleanupIntervalSqlLiterals,
+    LimitModel.rollingCleanupIntervalSqlLiterals,
   ).map(([cleanupInterval, sqlLiteral]) =>
     and(
       eq(
@@ -1001,7 +1080,93 @@ function buildCleanupDueCondition(): SQL {
     ),
   );
 
+  intervalConditions.push(
+    ...calendarCleanupIntervals.map((cleanupInterval) =>
+      and(
+        eq(schema.limitsTable.cleanupInterval, cleanupInterval),
+        lt(
+          schema.limitsTable.lastCleanup,
+          getCalendarPeriodStartSql(cleanupInterval),
+        ),
+      ),
+    ),
+  );
+
   return or(...intervalConditions) as SQL;
+}
+
+function buildUsagePeriodStartCondition(
+  cleanupInterval: LimitCleanupInterval,
+): SQL {
+  const rollingInterval =
+    LimitModel.rollingCleanupIntervalSqlLiterals[
+      cleanupInterval as RollingLimitCleanupInterval
+    ];
+  if (rollingInterval) {
+    return sql`${schema.interactionsTable.createdAt} >= now() - ${rollingInterval}::interval`;
+  }
+
+  if (isCalendarCleanupInterval(cleanupInterval)) {
+    return sql`${schema.interactionsTable.createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
+  }
+
+  throw new Error(`Unsupported cleanup interval: ${cleanupInterval}`);
+}
+
+function getCalendarPeriodStartSql(
+  cleanupInterval: CalendarLimitCleanupInterval,
+): SQL {
+  switch (cleanupInterval) {
+    case "calendar_day":
+      return sql`date_trunc('day', now())`;
+    case "calendar_week_sunday":
+      return sql`date_trunc('day', now()) - (extract(dow from now()) * interval '1 day')`;
+    case "calendar_week_monday":
+      return sql`date_trunc('week', now())`;
+    case "calendar_month":
+      return sql`date_trunc('month', now())`;
+  }
+}
+
+function isCalendarCleanupInterval(
+  cleanupInterval: LimitCleanupInterval,
+): cleanupInterval is CalendarLimitCleanupInterval {
+  return calendarCleanupIntervals.includes(
+    cleanupInterval as CalendarLimitCleanupInterval,
+  );
+}
+
+async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {
+  const modelEntriesByModelId = await ModelModel.findByModelIdsOnly(
+    Array.from(new Set(modelUsages.map((usage) => usage.model))),
+  );
+
+  let cost = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const breakdown = modelUsages.map((usage) => {
+    tokensIn += usage.currentUsageTokensIn;
+    tokensOut += usage.currentUsageTokensOut;
+
+    const modelEntry = modelEntriesByModelId.get(usage.model) ?? null;
+    const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
+    const modelCost =
+      (usage.currentUsageTokensIn * parseFloat(pricing.pricePerMillionInput)) /
+        1_000_000 +
+      (usage.currentUsageTokensOut *
+        parseFloat(pricing.pricePerMillionOutput)) /
+        1_000_000;
+    cost += modelCost;
+
+    return {
+      model: usage.model,
+      tokensIn: usage.currentUsageTokensIn,
+      tokensOut: usage.currentUsageTokensOut,
+      cost: modelCost,
+    };
+  });
+
+  return { breakdown, cost, tokensIn, tokensOut };
 }
 
 async function getDefaultUserLimitUsage(params: {
@@ -1013,7 +1178,8 @@ async function getDefaultUserLimitUsage(params: {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
     eq(schema.agentsTable.organizationId, params.organizationId),
-    sql`${schema.interactionsTable.createdAt} >= now() - ${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}::interval`,
+    notDeleted(schema.agentsTable),
+    buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 
   if (params.models && params.models.length > 0) {
@@ -1088,7 +1254,7 @@ function buildLimitViolationResponse(params: {
   limitDescription: "tokens" | "cost_dollars";
   totalTokensIn: number;
   totalTokensOut: number;
-}): [string, string] {
+}): LimitViolationResponse {
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
   const archestraMetadata = `
@@ -1097,7 +1263,7 @@ function buildLimitViolationResponse(params: {
 <archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
 <archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
 <archestra-limit-value>${params.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, params.limitValue - totalTokens)}</archestra-limit-remaining>`;
+<archestra-limit-remaining>${remaining}</archestra-limit-remaining>`;
 
   const contentMessage =
     params.limitDescription === "cost_dollars"
@@ -1118,7 +1284,11 @@ Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} toke
 
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
 
-  return [`${archestraMetadata}\n${contentMessage}`, contentMessage];
+  return [
+    `${archestraMetadata}\n${contentMessage}`,
+    contentMessage,
+    { entityType: params.entityType, limitType: "token_cost" },
+  ];
 }
 
 function normalizeLimitModels(models: string[] | null | undefined) {

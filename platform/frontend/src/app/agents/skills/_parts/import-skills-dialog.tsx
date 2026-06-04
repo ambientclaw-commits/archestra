@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes, ResourceVisibilityScope } from "@shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -39,21 +39,36 @@ import {
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import { SkillEditorDialog } from "./skill-editor-dialog";
+import { SkillScopeSelector } from "./skill-scope-selector";
 
 type DiscoveredSkill =
   archestraApiTypes.DiscoverGithubSkillsResponses["200"]["skills"][number];
+
+/**
+ * Skill metadata already held from the local skill index — enough to render the
+ * confirm step without re-scanning the whole repository over the network.
+ */
+export interface IndexedSkillSelection {
+  skillPath: string;
+  name: string;
+  description: string;
+  compatibility: string | null;
+  fileCount: number;
+}
 
 export function ImportSkillsDialog({
   open,
   onOpenChange,
   onImported,
   initialRepoUrl = "",
+  initialSkill,
   autoDiscover = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: () => void;
   initialRepoUrl?: string;
+  initialSkill?: IndexedSkillSelection;
   autoDiscover?: boolean;
 }) {
   const discover = useDiscoverGithubSkills();
@@ -67,6 +82,9 @@ export function ImportSkillsDialog({
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
+  // scope applies to every skill selected in this import
+  const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
+  const [teamIds, setTeamIds] = useState<string[]>([]);
 
   const previewBody = previewSkillPath
     ? {
@@ -88,6 +106,8 @@ export function ImportSkillsDialog({
     setSearch("");
     setPreviewSkillPath(null);
     setDiscoverError(null);
+    setScope("personal");
+    setTeamIds([]);
   };
 
   const backToDiscover = () => {
@@ -110,9 +130,8 @@ export function ImportSkillsDialog({
     });
     if (data) {
       setDiscovered(data.skills);
-      setSelected(
-        new Set(data.skills.filter((s) => !s.exists).map((s) => s.skillPath)),
-      );
+      const importableSkills = data.skills.filter((s) => !s.exists);
+      setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
     }
@@ -122,7 +141,22 @@ export function ImportSkillsDialog({
   useEffect(() => {
     if (!open) return;
     setRepoUrl(initialRepoUrl);
-    if (autoDiscover && initialRepoUrl) {
+    if (!autoDiscover) return;
+    if (initialSkill) {
+      // launched from the skill index: the exact skill is already known, so
+      // skip the repo-wide scan and go straight to the confirm step. the index
+      // doesn't carry allowedTools/templated (the server reads them from the
+      // manifest at import time), so default them for the preview row.
+      setDiscovered([
+        {
+          ...initialSkill,
+          allowedTools: null,
+          templated: false,
+          exists: false,
+        },
+      ]);
+      setSelected(new Set([initialSkill.skillPath]));
+    } else if (initialRepoUrl) {
       handleDiscover(initialRepoUrl);
     }
   }, [open]);
@@ -133,8 +167,13 @@ export function ImportSkillsDialog({
       ...(path.trim() && { path: path.trim() }),
       ...(githubToken.trim() && { githubToken: githubToken.trim() }),
       skillPaths: [...selected],
+      scope,
+      teamIds: scope === "team" ? teamIds : [],
     });
-    if (result) {
+    // only navigate away when something was actually created; if every selected
+    // skill was already in the org (created: [], skipped: [...]) the import was
+    // a no-op, so keep the dialog open — the mutation's toast reports the skip.
+    if (result && result.created.length > 0) {
       handleClose(false);
       onImported?.();
     }
@@ -609,6 +648,12 @@ export function ImportSkillsDialog({
               .
             </p>
           </div>
+          <SkillScopeSelector
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+          />
           {discoverError && (
             <Alert variant="destructive">
               <AlertTriangle />

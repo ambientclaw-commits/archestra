@@ -2,7 +2,6 @@
 
 import {
   type AgentScope,
-  type AgentToolAssignmentMode,
   type AgentType,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
@@ -17,7 +16,6 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
-  providerDisplayNames,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -25,12 +23,10 @@ import {
 import {
   AlertTriangle,
   Bot,
-  Building2,
   CheckIcon,
   ChevronDown,
   ChevronRight,
   Globe,
-  Key,
   Loader2,
   Plus,
   RotateCcw,
@@ -55,6 +51,7 @@ import {
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   formatPermissionRequirement,
   PermissionRequirementHint,
@@ -130,9 +127,8 @@ import {
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
-import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -147,15 +143,6 @@ import {
   normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
-
-const { useIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
-        data: [] as Array<{ id: string; providerId: string; issuer: string }>,
-      }),
-    };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -217,6 +204,10 @@ function getBuiltInAgentConfigForSave(params: {
     case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
       return {
         name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      };
+    case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
+      return {
+        name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
@@ -657,8 +648,6 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [toolAssignmentMode, setToolAssignmentMode] =
-    useState<AgentToolAssignmentMode>("manual");
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
@@ -676,26 +665,13 @@ export function AgentDialog({
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
-  const supportsAutomaticToolAssignment =
-    advancedToolFeaturesEnabled &&
-    (agentType === "agent" || agentType === "mcp_gateway");
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
       ? DocsPage.PlatformMcpGateway
       : DocsPage.PlatformAgents,
-    "search-and-run-tool-mode",
+    "load-tools-when-needed",
   );
-  const toolAssignmentDocsUrl = supportsAutomaticToolAssignment
-    ? getDocsUrl(
-        agentType === "mcp_gateway"
-          ? DocsPage.PlatformMcpGateway
-          : DocsPage.PlatformAgents,
-        "tool-assignment-mode",
-      )
-    : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -736,7 +712,6 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
-        setToolAssignmentMode(agentData.toolAssignmentMode);
         setToolExposureMode(agentData.toolExposureMode ?? "full");
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
@@ -770,7 +745,6 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        setToolAssignmentMode("manual");
         setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
@@ -801,15 +775,6 @@ export function AgentDialog({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
-
-  const apiKeysByProvider = useMemo(() => {
-    const grouped: Record<string, typeof availableApiKeys> = {};
-    for (const key of availableApiKeys) {
-      if (!grouped[key.provider]) grouped[key.provider] = [];
-      grouped[key.provider].push(key);
-    }
-    return grouped;
-  }, [availableApiKeys]);
 
   // Derive provider from selected model (like prompt input's initialProvider/currentProvider)
   const currentLlmProvider = useMemo((): SupportedProvider | null => {
@@ -995,9 +960,6 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
-            ...(supportsAutomaticToolAssignment && {
-              toolAssignmentMode,
-            }),
             ...(agentType === "mcp_gateway" && {
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -1035,9 +997,6 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
-          ...(supportsAutomaticToolAssignment && {
-            toolAssignmentMode,
-          }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -1132,8 +1091,6 @@ export function AgentDialog({
     onOpenChange,
     supportsIdentityProvider,
     passthroughHeaders,
-    toolAssignmentMode,
-    supportsAutomaticToolAssignment,
     deleteAgent,
     toolExposureMode,
   ]);
@@ -1501,62 +1458,22 @@ export function AgentDialog({
                   {/* Tools */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <Label>
-                        Tools
-                        {(!supportsAutomaticToolAssignment ||
-                          toolAssignmentMode === "manual") &&
-                          ` (${selectedToolsCount})`}
-                      </Label>
-                      {supportsAutomaticToolAssignment && (
-                        <Select
-                          value={toolAssignmentMode}
-                          onValueChange={(value) =>
-                            setToolAssignmentMode(
-                              value as AgentToolAssignmentMode,
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-auto gap-2 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            <SelectItem value="automatic">
-                              Automatic (by labels)
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Label>Tools ({selectedToolsCount})</Label>
                     </div>
-                    {supportsAutomaticToolAssignment &&
-                      toolAssignmentMode === "automatic" && (
-                        <p className="text-xs text-muted-foreground">
-                          Tools are auto-assigned from catalog entries that
-                          match this {agentTypeDisplayName[agentType]}'s labels.
-                          Switch to Manual to edit directly.
-                        </p>
-                      )}
-                    {!supportsAutomaticToolAssignment ||
-                    toolAssignmentMode === "manual" ? (
-                      <>
-                        {!agent && selectedToolsCount > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Some recommended {appName} MCP tools are
-                            pre-selected for you
-                          </p>
-                        )}
-                        <AgentToolsEditor
-                          ref={agentToolsEditorRef}
-                          agentId={agent?.id}
-                          assignmentScope={scope}
-                          assignmentTeamIds={assignedTeamIds}
-                          onSelectedCountChange={setSelectedToolsCount}
-                          openComboboxOnMount={openToolsCombobox}
-                        />
-                      </>
-                    ) : agent ? (
-                      <AgentToolsList agentId={agent.id} />
-                    ) : null}
+                    {!agent && selectedToolsCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Some recommended {appName} MCP tools are pre-selected
+                        for you
+                      </p>
+                    )}
+                    <AgentToolsEditor
+                      ref={agentToolsEditorRef}
+                      agentId={agent?.id}
+                      assignmentScope={scope}
+                      assignmentTeamIds={assignedTeamIds}
+                      onSelectedCountChange={setSelectedToolsCount}
+                      openComboboxOnMount={openToolsCombobox}
+                    />
                   </div>
 
                   {/* Subagents */}
@@ -1572,44 +1489,41 @@ export function AgentDialog({
                     />
                   </div>
 
-                  {advancedToolFeaturesEnabled && (
-                    <div className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="search-and-run-tool-mode"
-                          checked={toolExposureMode === "search_and_run_only"}
-                          onCheckedChange={(checked) =>
-                            setToolExposureMode(
-                              checked ? "search_and_run_only" : "full",
-                            )
-                          }
-                          className="mt-0.5"
-                        />
-                        <div className="space-y-1">
-                          <Label
-                            htmlFor="search-and-run-tool-mode"
-                            className="font-medium"
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="load-tools-when-needed"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="load-tools-when-needed"
+                          className="font-medium"
+                        >
+                          Load tools when needed
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Keep the initial tool list small. Assigned tools can
+                          still be found with{" "}
+                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and run
+                          with <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
                           >
-                            Search-and-run tool mode
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            Expose only{" "}
-                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
-                            <code>tools/list</code>; assigned tools stay
-                            searchable and runnable.{" "}
-                            <ExternalDocsLink
-                              href={toolExposureDocsUrl}
-                              className="underline"
-                              showIcon={false}
-                            >
-                              Learn more
-                            </ExternalDocsLink>
-                          </p>
-                        </div>
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Knowledge Sources */}
                   {(knowledgeBases.length > 0 || connectors.length > 0) && (
@@ -1824,126 +1738,30 @@ export function AgentDialog({
                               : null}
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
-                            <Popover
+                            <LlmProviderApiKeyDropdown
+                              availableKeys={availableApiKeys}
+                              selectedApiKeyId={llmApiKeyId}
                               open={apiKeySelectorOpen}
                               onOpenChange={setApiKeySelectorOpen}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 px-3 gap-1.5 text-xs max-w-[250px]"
-                                >
-                                  <Key className="h-3 w-3 shrink-0" />
-                                  {selectedApiKey ? (
-                                    <>
-                                      <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
-                                      <span className="font-medium truncate">
-                                        {selectedApiKey.name}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span className="text-muted-foreground">
-                                      Organization default
-                                    </span>
-                                  )}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent
-                                className="w-96 p-0"
-                                align="start"
-                              >
-                                <Command>
-                                  <CommandInput placeholder="Search API keys..." />
-                                  <CommandList>
-                                    <CommandEmpty>
-                                      No API keys found.
-                                    </CommandEmpty>
-                                    <CommandGroup>
-                                      <CommandItem
-                                        onSelect={() => {
-                                          setLlmApiKeyId(null);
-                                          setLlmModel(null);
-                                          lastAutoSelectedProviderRef.current =
-                                            null;
-                                          setApiKeySelectorOpen(false);
-                                        }}
-                                      >
-                                        <div className="flex flex-col min-w-0">
-                                          <span className="text-muted-foreground">
-                                            Organization default
-                                          </span>
-                                          <span className="text-xs text-muted-foreground">
-                                            No model or key set — falls back to
-                                            the organization default
-                                          </span>
-                                        </div>
-                                        {!llmApiKeyId && (
-                                          <CheckIcon className="ml-auto h-4 w-4" />
-                                        )}
-                                      </CommandItem>
-                                    </CommandGroup>
-                                    {(
-                                      Object.keys(
-                                        apiKeysByProvider,
-                                      ) as SupportedProvider[]
-                                    ).map((provider) => (
-                                      <CommandGroup
-                                        key={provider}
-                                        heading={
-                                          providerDisplayNames[provider] ??
-                                          provider
-                                        }
-                                      >
-                                        {apiKeysByProvider[provider]?.map(
-                                          (
-                                            apiKey: (typeof availableApiKeys)[number],
-                                          ) => (
-                                            <CommandItem
-                                              key={apiKey.id}
-                                              value={`${provider} ${apiKey.name} ${apiKey.teamName || ""}`}
-                                              onSelect={() => {
-                                                handleLlmApiKeyChange(
-                                                  apiKey.id,
-                                                );
-                                                setApiKeySelectorOpen(false);
-                                              }}
-                                              className="cursor-pointer"
-                                            >
-                                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                {apiKey.scope ===
-                                                  "personal" && (
-                                                  <User className="h-3 w-3 shrink-0" />
-                                                )}
-                                                {apiKey.scope === "team" && (
-                                                  <Users className="h-3 w-3 shrink-0" />
-                                                )}
-                                                {apiKey.scope === "org" && (
-                                                  <Building2 className="h-3 w-3 shrink-0" />
-                                                )}
-                                                <span className="truncate">
-                                                  {apiKey.name}
-                                                </span>
-                                                {apiKey.scope === "team" &&
-                                                  apiKey.teamName && (
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                      ({apiKey.teamName})
-                                                    </span>
-                                                  )}
-                                              </div>
-                                              {llmApiKeyId === apiKey.id && (
-                                                <CheckIcon className="ml-auto h-4 w-4 shrink-0" />
-                                              )}
-                                            </CommandItem>
-                                          ),
-                                        )}
-                                      </CommandGroup>
-                                    ))}
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-
+                              onSelectKey={(keyId) => {
+                                handleLlmApiKeyChange(keyId);
+                                setApiKeySelectorOpen(false);
+                              }}
+                              currentProvider={currentLlmProvider ?? undefined}
+                              triggerVariant="button"
+                              triggerClassName="h-8 max-w-[250px] text-xs"
+                              popoverClassName="w-96"
+                              popoverPortal={false}
+                              searchPlaceholder="Search API keys..."
+                              allowOrganizationDefault
+                              organizationDefaultSelected={!llmApiKeyId}
+                              onSelectOrganizationDefault={() => {
+                                setLlmApiKeyId(null);
+                                setLlmModel(null);
+                                lastAutoSelectedProviderRef.current = null;
+                                setApiKeySelectorOpen(false);
+                              }}
+                            />
                             {!llmApiKeyId ? (
                               <TooltipProvider delayDuration={300}>
                                 <Tooltip>
@@ -2005,21 +1823,7 @@ export function AgentDialog({
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <Label>Labels</Label>
-                              {supportsAutomaticToolAssignment && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  Organize and drive automatic tool assignment
-                                </span>
-                              )}
                             </div>
-                            {toolAssignmentDocsUrl && (
-                              <ExternalDocsLink
-                                href={toolAssignmentDocsUrl}
-                                className="text-xs text-muted-foreground underline shrink-0"
-                                showIcon={false}
-                              >
-                                Learn more
-                              </ExternalDocsLink>
-                            )}
                           </div>
                           <ProfileLabels
                             ref={agentLabelsRef}
@@ -2195,21 +1999,7 @@ export function AgentDialog({
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Label>Labels</Label>
-                        {supportsAutomaticToolAssignment && (
-                          <span className="text-xs font-normal text-muted-foreground">
-                            Organize and drive automatic tool assignment
-                          </span>
-                        )}
                       </div>
-                      {toolAssignmentDocsUrl && (
-                        <ExternalDocsLink
-                          href={toolAssignmentDocsUrl}
-                          className="text-xs text-muted-foreground underline shrink-0"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      )}
                     </div>
                     <ProfileLabels
                       ref={agentLabelsRef}

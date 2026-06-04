@@ -1,4 +1,12 @@
+import {
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@shared";
+import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { MessageModel } from "@/models";
+import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -122,8 +130,19 @@ describe("POST /api/chat slim error payload", () => {
           callback(),
       );
       mockCreateUIMessageStream.mockImplementation(
-        ({ onError }: { onError: (error: Error) => string }) =>
-          onError(new Error("Failed to fetch")),
+        ({ onError }: { onError: (error: Error) => string }) => {
+          const errorPayload = onError(new Error("Failed to fetch"));
+          return {
+            tee: () => [
+              errorPayload,
+              new ReadableStream({
+                start(controller) {
+                  controller.close();
+                },
+              }),
+            ],
+          };
+        },
       );
       mockCreateUIMessageStreamResponse.mockImplementation(
         ({ stream }: { stream: string }) =>
@@ -192,6 +211,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
+  let agentId: string;
   let conversationId: string;
   let capturedInnerOnError: ((err: unknown) => string) | undefined;
   let capturedInnerOnFinish:
@@ -216,6 +236,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
         name: "Router Agent",
         systemPrompt: "",
       });
+      agentId = agent.id;
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
@@ -257,6 +278,24 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
             next: async () => ({ done: true, value: undefined }),
           }),
         },
+        // the route probes fullStream for the first renderable event before
+        // merging; yield one so the probe proceeds to the merge these tests
+        // capture (errors are then injected via capturedInnerOnError).
+        fullStream: {
+          [Symbol.asyncIterator]: () => {
+            const events = [
+              { type: "text-delta", text: "" },
+              { type: "finish", finishReason: "stop" },
+            ];
+            let index = 0;
+            return {
+              next: async () =>
+                index < events.length
+                  ? { done: false, value: events[index++] }
+                  : { done: true, value: undefined },
+            };
+          },
+        },
         usage: Promise.resolve(null),
       }));
 
@@ -276,12 +315,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
             merge: vi.fn(),
           };
           executionPromise = execute({ writer }).catch(() => undefined);
-          return "mock-stream";
+          return new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          });
         },
       );
 
       mockCreateUIMessageStreamResponse.mockImplementation(
-        ({ stream }: { stream: string }) =>
+        ({ stream }: { stream: ReadableStream }) =>
           new Response(stream, {
             status: 200,
             headers: { "content-type": "text/plain" },
@@ -304,6 +347,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   );
 
   afterEach(async () => {
+    archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });
 
@@ -332,6 +376,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
     expect(capturedInnerOnError).toBeDefined();
+    const innerOnError = capturedInnerOnError;
+    if (!innerOnError) {
+      throw new Error("Expected inner onError to be captured");
+    }
 
     const stage1Error = new Error("Upstream provider error");
     const payload1 = capturedInnerOnError?.(stage1Error);
@@ -354,6 +402,104 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const errorsAfterFinish =
       await ConversationChatErrorModel.findByConversation(conversationId);
     expect(errorsAfterFinish).toHaveLength(1);
+  });
+
+  test("formats unavailable tool calls as tool-level errors without persisting chat errors", async ({
+    expect,
+  }) => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    const unavailableToolError = new NoSuchToolError({
+      toolName: "missing_tool",
+      availableTools: ["known_tool"],
+    });
+    const payload1 = capturedInnerOnError?.(unavailableToolError);
+    // the AI SDK re-invokes onError downstream with `new Error(errorText)`,
+    // wrapping the first return value — that duplicate must replay the payload.
+    const payload2 = capturedInnerOnError?.(new Error(payload1));
+
+    expect(payload1).toBe(payload2);
+    expect(payload1).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(payload1).toContain('"requestedToolName": "missing_tool"');
+    expect(payload1).toContain('"availableToolNames"');
+    expect(payload1).toContain("known_tool");
+    expect(payload1).toContain("Model tried to call unavailable tool");
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("formats each distinct unavailable tool error independently within one stream", async ({
+    expect,
+  }) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    const firstToolError = new NoSuchToolError({
+      toolName: "first_missing_tool",
+      availableTools: ["known_tool"],
+    });
+    const secondToolError = new NoSuchToolError({
+      toolName: "second_missing_tool",
+      availableTools: ["known_tool"],
+    });
+
+    const firstPayload = capturedInnerOnError?.(firstToolError);
+    const secondPayload = capturedInnerOnError?.(secondToolError);
+
+    expect(firstPayload).toContain('"requestedToolName": "first_missing_tool"');
+    expect(secondPayload).toContain(
+      '"requestedToolName": "second_missing_tool"',
+    );
+    expect(secondPayload).not.toBe(firstPayload);
+
+    // each payload is replayed (not reprocessed) on the downstream
+    // re-invocation the AI SDK fires as `new Error(errorText)`.
+    expect(capturedInnerOnError?.(new Error(firstPayload))).toBe(firstPayload);
+    expect(capturedInnerOnError?.(new Error(secondPayload))).toBe(
+      secondPayload,
+    );
   });
 
   test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({
@@ -451,6 +597,158 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
       compactedMessages,
+    );
+  });
+
+  test("prepends load-tools guidance when the agent loads tools when needed", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: "You are a careful analyst.",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "Some available tools are not listed upfront",
+    );
+    expect(systemPrompt).toContain(
+      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+    );
+    expect(systemPrompt).toContain(
+      `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
+    );
+    expect(systemPrompt).toContain("You are a careful analyst.");
+    expect(systemPrompt?.indexOf("Some available tools")).toBeLessThan(
+      systemPrompt?.indexOf("You are a careful analyst.") ?? -1,
+    );
+  });
+
+  test("adds load-tools guidance when the agent has no authored prompt", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: null,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "Some available tools are not listed upfront",
+    );
+    expect(systemPrompt).toContain(
+      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+    );
+    expect(systemPrompt).toContain(
+      `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
+    );
+  });
+
+  test("uses branded full tool names in load-tools guidance", async () => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Custom Ops",
+      iconLogo: null,
+    });
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: null,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "use `custom_ops__search_tools` to find relevant tools",
+    );
+    expect(systemPrompt).toContain("then call `custom_ops__run_tool`");
+    expect(systemPrompt).not.toContain("use `search_tools`");
+    expect(systemPrompt).not.toContain("then call `run_tool`");
+  });
+
+  test("does not add load-tools guidance for fully exposed tools", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "full",
+      systemPrompt: "Use the normal tools.",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain("Use the normal tools.");
+    expect(systemPrompt).not.toContain(
+      "Some available tools are not listed upfront",
     );
   });
 
@@ -563,5 +861,402 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       type: "data-context-compaction-finish",
       data: { status: "skipped", reason: "not_beneficial" },
     });
+  });
+
+  test("creates a running active run that replay clients can attach to", async () => {
+    const streamedChunk = {
+      type: "text-delta",
+      id: "text-active-run",
+      delta: "still streaming",
+    } as const;
+    let streamController!: ReadableStreamDefaultController<unknown>;
+
+    mockCreateUIMessageStreamResponse.mockImplementation(
+      ({ stream }: { stream: ReadableStream<unknown> }) =>
+        new Response(toSseStream(stream), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    );
+
+    mockCreateUIMessageStream.mockImplementationOnce(() => {
+      const stream = new ReadableStream<unknown>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
+
+      return { tee: () => stream.tee() };
+    });
+
+    const postResponsePromise = app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-active-run-user",
+            role: "user",
+            parts: [{ type: "text", text: "hello active run" }],
+          },
+        ],
+      },
+    });
+
+    const activeRun = await waitForRunningActiveRun(conversationId);
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-active-run-duplicate-user",
+            role: "user",
+            parts: [{ type: "text", text: "duplicate active run" }],
+          },
+        ],
+      },
+    });
+    expect(duplicateResponse.statusCode).toBe(409);
+    expect(duplicateResponse.json().error.message).toContain("active response");
+
+    await ActiveChatRunModel.appendEvents({
+      runId: activeRun.id,
+      seq: 1,
+      payloads: [{ type: "start" }, streamedChunk],
+    });
+
+    const replayResponsePromise = app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+
+    await expect(
+      Promise.race([
+        replayResponsePromise.then(() => "closed"),
+        delay(50).then(() => "still-open"),
+      ]),
+    ).resolves.toBe("still-open");
+
+    await ActiveChatRunModel.markTerminal({
+      runId: activeRun.id,
+      status: "completed",
+    });
+    streamController.close();
+
+    const [postResponse, replayResponse] = await Promise.all([
+      postResponsePromise,
+      replayResponsePromise,
+    ]);
+
+    expect(postResponse.statusCode).toBe(200);
+    expect(replayResponse.statusCode).toBe(200);
+    expect(readSsePayloads(replayResponse.body)).toContainEqual(streamedChunk);
+    const persistedMessages =
+      await MessageModel.findByConversation(conversationId);
+    expect(persistedMessages).toHaveLength(1);
+    expect(persistedMessages[0]?.role).toBe("user");
+    expect(persistedMessages[0]?.content).toMatchObject({
+      parts: [{ text: "hello active run" }],
+    });
+    await expect(
+      ActiveChatRunModel.findById(activeRun.id),
+    ).resolves.toMatchObject({ status: "completed" });
+  });
+});
+
+async function waitForRunningActiveRun(conversationId: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const run =
+      await ActiveChatRunModel.findRunningByConversation(conversationId);
+    if (run) {
+      return run;
+    }
+    await delay(10);
+  }
+
+  throw new Error("Active run was not created");
+}
+
+function readSsePayloads(body: string): unknown[] {
+  return body
+    .split("\n\n")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.startsWith("data: "))
+    .map((entry) => entry.slice("data: ".length))
+    .filter((entry) => entry !== "[DONE]")
+    .map((entry) => JSON.parse(entry));
+}
+
+function toSseStream(stream: ReadableStream<unknown>): ReadableStream<string> {
+  return stream.pipeThrough(
+    new TransformStream<unknown, string>({
+      transform(chunk, controller) {
+        controller.enqueue(`data: ${JSON.stringify(chunk)}\n\n`);
+      },
+      flush(controller) {
+        controller.enqueue("data: [DONE]\n\n");
+      },
+    }),
+  );
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// streamText result whose fullStream yields the given events. Used to drive the
+// route's empty-response probe/retry loop without a live provider.
+function fakeStreamResult(events: Array<Record<string, unknown>>) {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]: () => {
+        let index = 0;
+        return {
+          next: async () =>
+            index < events.length
+              ? { done: false, value: events[index++] }
+              : { done: true, value: undefined },
+        };
+      },
+    },
+    toUIMessageStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    usage: Promise.resolve(null),
+  };
+}
+
+// streamText result whose fullStream throws a context-length error on first read,
+// matching parseMaxInputTokens. Used to exercise the bounded context-trim retry.
+function fakeContextLengthErrorResult() {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error("maximum input length of 100 tokens");
+        },
+      }),
+    },
+    toUIMessageStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    usage: Promise.resolve(null),
+  };
+}
+
+const EMPTY_STREAM_EVENTS = [
+  { type: "start" },
+  { type: "finish", finishReason: "stop" },
+];
+const RENDERABLE_STREAM_EVENTS = [
+  { type: "text-delta", text: "hi" },
+  { type: "finish", finishReason: "stop" },
+];
+
+describe("POST /api/chat empty-response retry", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+  let conversationId: string;
+  let executionPromise: Promise<void> | undefined;
+  let capturedOuterErrorPayload: string | undefined;
+
+  beforeEach(
+    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+      executionPromise = undefined;
+      capturedOuterErrorPayload = undefined;
+
+      user = await makeUser();
+      const organization = await makeOrganization({ name: "Test Org" });
+      organizationId = organization.id;
+      const agent = await makeAgent({
+        organizationId,
+        name: "Router Agent",
+        systemPrompt: "",
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId,
+      });
+      conversationId = conversation.id;
+
+      mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
+      mockGetChatMcpTools.mockResolvedValue({});
+      mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
+      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
+      mockCompactMessagesForChat.mockImplementation(
+        async ({ messages }: { messages: unknown[] }) => ({
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "below_threshold",
+        }),
+      );
+      mockStartActiveChatSpan.mockImplementation(
+        async ({ callback }: { callback: () => Promise<Response> }) =>
+          callback(),
+      );
+      mockCreateUIMessageStream.mockImplementation(
+        ({
+          execute,
+          onError,
+        }: {
+          execute: (args: {
+            writer: {
+              write: (x: unknown) => void;
+              merge: (s: unknown) => void;
+            };
+          }) => Promise<void>;
+          onError: (error: unknown) => string;
+        }) => {
+          const writer = { write: vi.fn(), merge: vi.fn() };
+          // route the pre-merge throw (exhausted empty response) to onError,
+          // mirroring how createUIMessageStream surfaces an execute() rejection.
+          executionPromise = execute({ writer }).catch((error) => {
+            capturedOuterErrorPayload = onError(error);
+          });
+          return new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          });
+        },
+      );
+      mockCreateUIMessageStreamResponse.mockImplementation(
+        ({ stream }: { stream: ReadableStream }) =>
+          new Response(stream, {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          }),
+      );
+
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: User }).user = user;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = organizationId;
+      });
+      const { default: chatRoutes } = await import("./routes");
+      await app.register(chatRoutes);
+    },
+  );
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function postMessage() {
+    return app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+  }
+
+  test("retries a clean-but-empty response, then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() => fakeStreamResult(EMPTY_STREAM_EVENTS))
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("surfaces an EmptyResponse stream error after exhausting retries", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(EMPTY_STREAM_EVENTS),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    expect(capturedOuterErrorPayload).toBeDefined();
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("empty_response");
+  });
+
+  test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({
+    expect,
+  }) => {
+    // messages large enough that trimMessagesToTokenLimit (400-char budget for the
+    // mocked 100-token limit) actually drops content, so the trimmed payload is
+    // observably different from the original.
+    const longContent = "x".repeat(300);
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [
+        { role: "user", content: longContent },
+        { role: "assistant", content: longContent },
+        { role: "user", content: longContent },
+      ],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    mockStreamText
+      .mockImplementationOnce(() => fakeContextLengthErrorResult())
+      .mockImplementationOnce(() => fakeStreamResult(EMPTY_STREAM_EVENTS))
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    const originalMessages = mockStreamText.mock.calls[0][0].messages;
+    const trimmedMessages = mockStreamText.mock.calls[1][0].messages;
+    const emptyRetryMessages = mockStreamText.mock.calls[2][0].messages;
+    // the trim must have actually changed the payload, otherwise this test proves
+    // nothing about which payload the empty-retry resends.
+    expect(trimmedMessages).not.toEqual(originalMessages);
+    // the empty-response retry resends the trimmed payload, not the original.
+    expect(emptyRetryMessages).toEqual(trimmedMessages);
+  });
+
+  test("bounds context-trim retries instead of looping on a repeated context-length error", async ({
+    expect,
+  }) => {
+    // content-shaped model messages so trimMessagesToTokenLimit runs cleanly and
+    // the cap (not a crash) is what bounds the loop.
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [{ role: "user", content: "hi" }],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    // every attempt rejects with the same max-token error; trimming is
+    // deterministic, so without a cap this would retry forever.
+    mockStreamText.mockImplementation(() => fakeContextLengthErrorResult());
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // initial attempt + exactly one trim retry, then fall through to the merge.
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
   });
 });

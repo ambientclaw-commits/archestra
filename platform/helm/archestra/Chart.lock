@@ -2,5 +2,8 @@ dependencies:
 - name: postgresql
   repository: https://charts.bitnami.com/bitnami
   version: 18.0.8
-digest: sha256:03e8f85e37fd87c2bd6cd98cf1ebb82091418545bbae4e508137f95992983d1e
-generated: "2025-10-07T09:23:21.298408-04:00"
+- name: dagger-helm
+  repository: oci://registry.dagger.io
+  version: 0.21.0
+digest: sha256:e96e8ce84ad46459b8241befd55a46317f255d43914daf5bf098384202bc3d46
+generated: "2026-05-30T23:57:54.923347+02:00"

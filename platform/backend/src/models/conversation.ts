@@ -1,3 +1,4 @@
+import { hasPersistableAssistantContent } from "@shared";
 import {
   and,
   desc,
@@ -12,6 +13,7 @@ import db, { schema } from "@/database";
 import type {
   Conversation,
   InsertConversation,
+  ToolExposureMode,
   UpdateConversation,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -125,7 +127,9 @@ class ConversationModel {
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -162,7 +166,7 @@ class ConversationModel {
         )
         .where(and(...conditions))
         .orderBy(
-          desc(schema.conversationsTable.updatedAt),
+          desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
         )
         .limit(
@@ -182,8 +186,7 @@ class ConversationModel {
             continue;
           }
           conversationMap.set(conversationId, {
-            ...row.conversation,
-            agent: row.agent,
+            ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
             messages: [],
             chatErrors: [],
@@ -192,7 +195,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        if (conversation && row?.message?.content) {
+        if (
+          conversation &&
+          row?.message?.content &&
+          shouldReturnPersistedMessageRow(row.message)
+        ) {
           // Limit messages per conversation for preview
           if (
             conversation.messages.length <
@@ -222,7 +229,9 @@ class ConversationModel {
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -238,11 +247,10 @@ class ConversationModel {
           ),
         )
         .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.updatedAt));
+        .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
-        ...row.conversation,
-        agent: row.agent,
+        ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
@@ -273,7 +281,9 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -313,15 +323,17 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         // Merge database UUID into message content (overrides AI SDK's temporary ID)
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -376,7 +388,9 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -415,14 +429,16 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -518,6 +534,25 @@ class ConversationModel {
 
 export default ConversationModel;
 
+// Read-side guard for assistant rows that were persisted before the strict
+// persist normalization (or by an older client) and would otherwise reload as
+// an empty bubble. The DB `role` column is authoritative — a `content: ""` row
+// has no role inside its content. Read-only: bad rows are hidden, never deleted.
+function shouldReturnPersistedMessageRow(message: {
+  role: string;
+  content: unknown;
+}): boolean {
+  if (message.role !== "assistant") {
+    return true;
+  }
+  if (typeof message.content !== "object" || message.content === null) {
+    return false;
+  }
+  return hasPersistableAssistantContent(
+    message.content as { parts?: ReadonlyArray<{ type: string }> },
+  );
+}
+
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
@@ -540,6 +575,43 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+    },
+  };
+}
+
+type JoinedConversationAgent = {
+  id: string | null;
+  name: string | null;
+  systemPrompt: string | null;
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
+  toolExposureMode: ToolExposureMode | null;
+  llmApiKeyId: string | null;
+  deletedAt: Date | null;
+} | null;
+
+function withVisibleAgent(
+  conversation: typeof schema.conversationsTable.$inferSelect,
+  agent: JoinedConversationAgent,
+): typeof schema.conversationsTable.$inferSelect & {
+  agent: Conversation["agent"];
+} {
+  if (!agent?.id || agent.deletedAt !== null) {
+    return {
+      ...conversation,
+      agentId: null,
+      agent: null,
+    };
+  }
+
+  return {
+    ...conversation,
+    agent: {
+      id: agent.id,
+      name: agent.name ?? "",
+      systemPrompt: agent.systemPrompt,
+      agentType: agent.agentType ?? "agent",
+      toolExposureMode: agent.toolExposureMode ?? "full",
+      llmApiKeyId: agent.llmApiKeyId,
     },
   };
 }

@@ -3,9 +3,14 @@ import {
   ChatMessageMetadataSchema,
   type ChatMessagePart,
 } from "@shared";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel } from "@/models";
-import { formatSkillActivation } from "@/skills/skill-activation";
+import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
+import {
+  buildSkillActivationPromptContext,
+  formatSkillActivation,
+} from "@/skills/skill-activation";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 
 /**
  * When the last user message was sent via a skill slash command, prepend the
@@ -14,15 +19,21 @@ import { formatSkillActivation } from "@/skills/skill-activation";
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
- * is off, the metadata is absent, or the skill cannot be resolved, the input is
+ * is off, the metadata is absent, the user lacks `skill:read`, or the skill
+ * cannot be resolved or accessed by the user (per its scope), the input is
  * returned unchanged.
  */
 export async function injectSkillActivation({
   messages,
   organizationId,
+  userId,
+  agentId,
 }: {
   messages: ChatMessage[];
   organizationId: string;
+  userId: string;
+  /** The conversation's agent — gates the sandbox hint on tool assignment. */
+  agentId: string | undefined;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -47,6 +58,32 @@ export async function injectSkillActivation({
     return messages;
   }
 
+  // Enforce RBAC — a slash command must not bypass the `skill:read` gate that
+  // guards the skills API and the MCP skill tools.
+  const checker = await getSkillPermissionChecker({ userId, organizationId });
+  if (!checker.canRead) {
+    logger.warn(
+      { organizationId, userId, skillId: skill.id },
+      "[Skills] User lacks skill:read for slash-command skill; sending message unchanged",
+    );
+    return messages;
+  }
+
+  // Enforce the skill's scope on top of the read gate.
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId,
+    userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
+    logger.warn(
+      { organizationId, userId, skillId: skill.id },
+      "[Skills] User lacks access to slash-command skill; sending message unchanged",
+    );
+    return messages;
+  }
+
   const files = await SkillFileModel.findBySkillId(skill.id);
   logger.info(
     { organizationId, skillName: skill.name, fileCount: files.length },
@@ -56,7 +93,17 @@ export async function injectSkillActivation({
   const next = [...messages];
   next[lastUserIndex] = prependText(
     userMessage,
-    formatSkillActivation({ skill, files }),
+    formatSkillActivation({
+      skill,
+      files,
+      canRunSandbox: await isSkillSandboxAvailableForAgent({
+        checker,
+        agentId,
+      }),
+      promptContext: skill.templated
+        ? await buildSkillActivationPromptContext({ userId, organizationId })
+        : null,
+    }),
   );
   return next;
 }

@@ -56,7 +56,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -156,6 +156,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         profileId: pid,
         token: jwt,
         expectedToolName: getServerInfoToolName,
+        identityProviderId,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);
@@ -229,7 +230,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // Verify the upstream MCP server is healthy
     await waitForApiEndpointHealthy({
@@ -373,7 +374,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     uninstallMcpServer,
     waitForAgentTool,
   }) => {
-    test.slow();
+    test.setTimeout(300_000);
 
     // STEP 1: Get a JWT from Keycloak
     const jwt = await getKeycloakJwt();
@@ -505,6 +506,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         profileId: pid,
         token: jwt,
         expectedToolName: getServerInfoToolName,
+        identityProviderId,
       });
       const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain(getServerInfoToolName);
