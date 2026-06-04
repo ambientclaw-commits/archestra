@@ -54,6 +54,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `admin` |
+| GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -143,6 +144,10 @@ The following table lists all available permissions that can be assigned to cust
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
 | `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
+| `githubAppConfig:read` | View GitHub App configurations |
+| `githubAppConfig:create` | Create GitHub App configurations |
+| `githubAppConfig:update` | Modify GitHub App configurations |
+| `githubAppConfig:delete` | Delete GitHub App configurations |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
