@@ -837,14 +837,26 @@ function ChatSessionHook({
       partIndex: number;
       text: string;
     }) => {
+      // Persist the (possibly edited) text and get the saved thread back, which
+      // carries each message under its DB id.
       const data = await updateChatMessageAsync({ messageId, partIndex, text });
       const canonical = data?.messages as UIMessage[] | undefined;
       const anchor = canonical?.find((m) => m.id === messageId);
-      if (!canonical || !anchor) {
+
+      if (canonical && anchor) {
+        // Normal path: the message is persisted. Sync to the saved thread and
+        // regenerate from it. The server replaces the turn atomically.
+        setMessages(canonical);
+        void regenerate({ messageId: anchor.id });
         return;
       }
-      setMessages(canonical);
-      void regenerate({ messageId: anchor.id });
+
+      // --- swap_agent support (safe to delete this block) ---
+      // After switching agents the target message can still be in-session: its
+      // id is an AI SDK nanoid, so it isn't found in the saved thread above.
+      // Regenerate in place using the live id (the backend matches it to the
+      // stored row by content id).
+      void regenerate({ messageId });
     },
     [updateChatMessageAsync, setMessages, regenerate],
   );
