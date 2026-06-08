@@ -974,20 +974,16 @@ export function ChatPageContent({
     syncPersistedMessageMetadata(persistedConversationMessages);
   }, [persistedConversationMessages, status, syncPersistedMessageMetadata]);
 
-  const {
-    conversationAgentId,
-    activeAgentId,
-    promptAgentId,
-    swappedAgentName,
-  } = useChatAgentState({
-    conversation,
-    initialAgentId,
-    messages,
-    agents: internalAgents.map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-    })),
-  });
+  const { conversationAgentId, activeAgentId, promptAgentId } =
+    useChatAgentState({
+      conversation,
+      initialAgentId,
+      messages,
+      agents: internalAgents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+      })),
+    });
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
@@ -2263,7 +2259,6 @@ export function ChatPageContent({
                           onCompactConversation={handleCompactConversation}
                           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
                           selectorAgentId={activeAgentId}
-                          selectorAgentName={swappedAgentName ?? undefined}
                           onAgentChange={handleConversationAgentChange}
                           modelSource={conversationModelSource}
                           onResetModelOverride={

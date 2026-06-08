@@ -20,7 +20,6 @@ import {
   createUIMessageStreamResponse,
   generateId,
   generateText,
-  hasToolCall,
   NoSuchToolError,
   stepCountIs,
   streamText,
@@ -2482,20 +2481,7 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
 }
 
 export function buildChatStopConditions() {
-  return [
-    stepCountIs(500),
-    hasToolCall(getChatStopToolNames().swapAgentToolName),
-    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
-  ];
-}
-
-export function getChatStopToolNames() {
-  return {
-    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
-    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
-      "swap_to_default_agent",
-    ),
-  };
+  return [stepCountIs(500)];
 }
 
 /**
@@ -2848,8 +2834,8 @@ function getMessagesNotYetPersisted(params: {
 
     // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
     // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
+    // ids. Track both forms so follow-up turns do not get dropped just because
+    // the incoming thread is shorter than the DB thread.
     const contentId = getMessageContentId(message.content);
 
     if (contentId && contentId.length > 0) {

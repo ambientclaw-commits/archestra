@@ -3,11 +3,14 @@ import db, { schema } from "@/database";
 import type { ChatOpsThreadAgentOverride } from "@/types/chatops-thread-agent-override";
 
 /**
- * Model for managing per-thread agent overrides in chatops channels.
+ * @deprecated The swap-agent feature was removed. This model is retained
+ * alongside its (also deprecated) backing table to avoid a destructive
+ * migration; it is no longer used by application code. Do not use in new code.
  *
- * When swap_agent is called during a ChatOps conversation, the override is
- * stored here instead of mutating the shared channel binding. This ensures
- * swaps are scoped to the active thread/conversation.
+ * Historically: managed per-thread agent overrides in chatops channels. When
+ * swap_agent was called during a ChatOps conversation, the override was stored
+ * here instead of mutating the shared channel binding, so swaps were scoped to
+ * the active thread/conversation.
  */
 class ChatOpsThreadAgentOverrideModel {
   /**

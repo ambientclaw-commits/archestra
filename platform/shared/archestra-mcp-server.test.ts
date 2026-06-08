@@ -13,7 +13,6 @@ import {
 describe("archestra MCP tool names", () => {
   test("contains the shared special tool short names", () => {
     expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("create_agent");
-    expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("swap_agent");
     expect(ARCHESTRA_TOOL_SHORT_NAMES).toContain("artifact_write");
   });
 

@@ -174,7 +174,7 @@ describe("run_tool", () => {
 
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
-      { tool_name: "swap_agent", tool_args: { agentId: "some-agent-id" } },
+      { tool_name: "todo_write", tool_args: { todos: [] } },
       {
         ...mockContext,
         agent: { id: unassignedAgent.id, name: unassignedAgent.name },

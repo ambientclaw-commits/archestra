@@ -373,9 +373,8 @@ export async function handleGetResource<
     if (args.id) {
       record = await AgentModel.findById(args.id, context.userId, isAdmin);
       // findById doesn't support excludeOtherPersonalAgents, so we guard here.
-      // swap_agent is the primary Archestra MCP use-case and requires only the
-      // caller's own personal agents to be visible, even though admins can see
-      // all personal agents in the UI.
+      // Only the caller's own personal agents should be visible, even though
+      // admins can see all personal agents in the UI.
       if (
         record &&
         record.scope === "personal" &&
@@ -391,10 +390,9 @@ export async function handleGetResource<
         {
           name: args.name,
           agentType: expectedType,
-          // Hide other users' personal agents from MCP tools. swap_agent is
-          // the primary Archestra MCP use-case and requires only the caller's
-          // own personal agents to be visible, even though admins can see all
-          // personal agents in the UI.
+          // Hide other users' personal agents from MCP tools. Only the
+          // caller's own personal agents should be visible, even though admins
+          // can see all personal agents in the UI.
           excludeOtherPersonalAgents: true,
         },
         context.userId,

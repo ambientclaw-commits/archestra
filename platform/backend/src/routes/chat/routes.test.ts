@@ -20,7 +20,6 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
   };
 });
 
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createLLMModel } from "@/clients/llm-client";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
@@ -32,7 +31,6 @@ import {
   buildTitlePrompt,
   extractFirstMessages,
   generateConversationTitle,
-  getChatStopToolNames,
 } from "./routes";
 
 describe("prepareMessagesForProvider", () => {
@@ -465,8 +463,8 @@ describe("getMessagesNotYetPersisted", () => {
             role: "assistant",
             parts: [
               {
-                type: "tool-archestra__swap_agent",
-                toolCallId: "swap-1",
+                type: "tool-archestra__todo_write",
+                toolCallId: "tool-1",
                 state: "output-available",
                 output: { success: true },
               },
@@ -476,12 +474,12 @@ describe("getMessagesNotYetPersisted", () => {
       ],
       uiMessages: [
         {
-          id: "swap-poke-1",
+          id: "user-2",
           role: "user",
           parts: [
             {
               type: "text",
-              text: "(Switched to Drawing agent. Please continue the conversation.)",
+              text: "please continue",
             },
           ],
         },
@@ -495,7 +493,7 @@ describe("getMessagesNotYetPersisted", () => {
 
     expect(newMessages).toHaveLength(2);
     expect(newMessages.map((message) => message.id)).toEqual([
-      "swap-poke-1",
+      "user-2",
       "assistant-2",
     ]);
   });
@@ -1031,22 +1029,9 @@ describe("buildTitlePrompt", () => {
 });
 
 describe("buildChatStopConditions", () => {
-  it("uses the branded built-in swap tool names", () => {
-    archestraMcpBranding.syncFromOrganization({
-      appName: "Acme Control Plane",
-      iconLogo: null,
-    });
-
+  it("stops on the step-count limit", () => {
     const stopConditions = buildChatStopConditions();
-    const toolNames = getChatStopToolNames();
-
-    expect(stopConditions).toHaveLength(3);
-    expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
-    expect(toolNames.swapToDefaultAgentToolName).toBe(
-      "acme_control_plane__swap_to_default_agent",
-    );
-
-    archestraMcpBranding.syncFromOrganization(null);
+    expect(stopConditions).toHaveLength(1);
   });
 });
 

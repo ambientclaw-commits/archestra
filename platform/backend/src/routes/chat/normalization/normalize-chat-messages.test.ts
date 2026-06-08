@@ -25,16 +25,16 @@ describe("normalizeChatMessages", () => {
             output: "created",
           },
           {
-            type: "tool-archestra__swap_agent",
-            toolCallId: "call_swap_1",
+            type: "tool-archestra__todo_write",
+            toolCallId: "call_todo_1",
             state: "output-available",
-            output: "swapped",
+            output: "written",
           },
           {
-            type: "tool-archestra__swap_agent",
-            toolCallId: "call_swap_1",
+            type: "tool-archestra__todo_write",
+            toolCallId: "call_todo_1",
             state: "output-available",
-            output: "swapped",
+            output: "written",
           },
         ],
       },
@@ -48,7 +48,7 @@ describe("normalizeChatMessages", () => {
       dedupedParts.filter((part) => part.toolCallId === "call_create_1"),
     ).toHaveLength(1);
     expect(
-      dedupedParts.filter((part) => part.toolCallId === "call_swap_1"),
+      dedupedParts.filter((part) => part.toolCallId === "call_todo_1"),
     ).toHaveLength(1);
   });
 

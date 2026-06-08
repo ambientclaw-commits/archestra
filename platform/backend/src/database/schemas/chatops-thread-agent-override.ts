@@ -10,14 +10,16 @@ import agentsTable from "./agent";
 import chatopsChannelBindingsTable from "./chatops-channel-binding";
 
 /**
- * Per-thread agent overrides for chatops channels.
+ * @deprecated The swap-agent feature was removed. This table is no longer
+ * written or read by application code. It is intentionally retained (and kept
+ * registered in the schema index) so Drizzle does NOT generate a destructive
+ * drop migration. It may be dropped in a future, explicit migration.
  *
- * When swap_agent is called during a ChatOps conversation, the override is
- * stored here instead of mutating the shared channel binding. This ensures
- * swaps are scoped to the active thread/conversation, preventing cross-thread
- * races where concurrent threads would overwrite each other's agent.
+ * Historically: per-thread agent overrides for chatops channels. When
+ * swap_agent was called during a ChatOps conversation, the override was stored
+ * here instead of mutating the shared channel binding, so swaps were scoped to
+ * the active thread/conversation.
  *
- * The channel binding's agentId remains the admin-configured default.
  * Unique constraint on (binding_id, thread_id) ensures one override per thread.
  */
 const chatopsThreadAgentOverrideTable = pgTable(

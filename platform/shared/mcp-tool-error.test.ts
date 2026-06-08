@@ -185,17 +185,17 @@ ${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
         structuredContent: {
           archestraError: {
             type: "tool_state",
-            code: "already_using_agent",
-            message: "Already using agent.",
-            toolName: "archestra__swap_agent",
+            code: "invalid_state",
+            message: "Invalid state.",
+            toolName: "archestra__create_agent",
           },
         },
       }),
     ).toEqual({
       type: "tool_state",
-      code: "already_using_agent",
-      message: "Already using agent.",
-      toolName: "archestra__swap_agent",
+      code: "invalid_state",
+      message: "Invalid state.",
+      toolName: "archestra__create_agent",
     });
   });
 });

@@ -12,6 +12,9 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
+    // @deprecated swap-agent model retained alongside its deprecated table to
+    // avoid a destructive migration; no longer referenced by app code.
+    "src/models/chatops-thread-agent-override.ts!",
   ],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
