@@ -111,6 +111,7 @@ interface ChatSession {
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
+  regenerate: ReturnType<typeof useChat>["regenerate"];
   stop: () => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
@@ -822,6 +823,7 @@ function ChatSessionHook({
     conversationId,
     messages: stableMessages,
     sendMessage,
+    regenerate,
     stop,
     status,
     error,
@@ -849,6 +851,7 @@ function ChatSessionHook({
     conversationId,
     stableMessages,
     sendMessage,
+    regenerate,
     stop,
     status,
     error,

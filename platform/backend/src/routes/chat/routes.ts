@@ -44,7 +44,7 @@ import {
   isApiKeyRequired,
 } from "@/clients/llm-client";
 import config from "@/config";
-import { withDbTransaction } from "@/database";
+import db, { type Transaction, withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
@@ -211,7 +211,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const {
-        body: { id: conversationId, messages },
+        body: { id: conversationId, messages, trigger },
         user,
         organizationId,
       } = request;
@@ -1057,11 +1057,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
                       try {
-                        await persistNewMessages(
-                          conversationId,
-                          finalMessages,
-                          "onFinish",
-                        );
+                        if (trigger === "regenerate-message") {
+                          // Replace the regenerated turn atomically: delete the
+                          // stale messages below the anchor and write the new
+                          // turn in one transaction (no destructive pre-delete).
+                          await persistRegeneratedTurn({
+                            conversationId,
+                            requestMessages: messages,
+                            finalMessages,
+                          });
+                        } else {
+                          await persistNewMessages(
+                            conversationId,
+                            finalMessages,
+                            "onFinish",
+                          );
+                        }
                         messagesPersisted = true;
                       } catch (error) {
                         logger.error(
@@ -2626,15 +2637,85 @@ function formatUnavailableToolErrorDetails(
  * @param context - Context for logging (e.g., "onFinish", "onError")
  * @returns Promise<number> - Number of messages persisted
  */
+type DbExecutor = typeof db | Transaction;
+
+/**
+ * Regenerate a turn: find the user message being regenerated, delete every
+ * message below it, and persist the freshly generated turn — all in one
+ * transaction. The transaction is the point: nothing is deleted unless the new
+ * turn is written in the same commit, so an interrupted or failed regenerate
+ * can never leave the conversation with the old turn gone and no replacement.
+ *
+ * The anchor (the user message) is matched by id; deletion is by id. It never
+ * keys off `createdAt`.
+ *
+ * @param requestMessages - the thread the client sent, ending at the user
+ *   message being regenerated (the anchor)
+ * @param finalMessages - the server-authoritative thread after generation
+ */
+async function persistRegeneratedTurn(params: {
+  conversationId: string;
+  requestMessages: unknown[];
+  finalMessages: unknown[];
+}): Promise<number> {
+  const { conversationId, requestMessages, finalMessages } = params;
+  const anchor = (requestMessages as ChatMessage[]).at(-1);
+  const anchorIds = new Set(anchor ? getUiMessageIdentityIds(anchor) : []);
+
+  return withDbTransaction(async (tx) => {
+    const existing = await MessageModel.findByConversation(conversationId, tx);
+
+    // Find the anchor among the stored rows, then delete everything below it.
+    const anchorIndex = existing.findIndex((row) =>
+      getStoredMessageIdentityIds(row).some((id) => anchorIds.has(id)),
+    );
+    const idsBelowAnchor =
+      anchorIndex >= 0
+        ? existing.slice(anchorIndex + 1).map((row) => row.id)
+        : [];
+    await MessageModel.deleteByIds(idsBelowAnchor, tx);
+
+    // Persist the new turn against the post-deletion state, on the same tx, so
+    // delete + insert commit together.
+    const persisted = await persistNewMessages(
+      conversationId,
+      finalMessages,
+      "onFinish",
+      tx,
+    );
+
+    logger.info(
+      { conversationId, deleted: idsBelowAnchor.length, persisted },
+      "Regenerate: atomically replaced trailing turn",
+    );
+    return persisted;
+  });
+}
+
+/** A stored row's identity: its primary key plus the AI SDK id in its content. */
+function getStoredMessageIdentityIds(row: {
+  id: string;
+  content: unknown;
+}): string[] {
+  const contentId = getMessageContentId(row.content);
+  return contentId ? [row.id, contentId] : [row.id];
+}
+
 async function persistNewMessages(
   conversationId: string,
   messages: unknown[],
   context: string,
+  executor: DbExecutor = db,
 ): Promise<number> {
   try {
-    // Fetch existing messages to classify incoming ones as new or changed
-    const existingMessages =
-      await MessageModel.findByConversation(conversationId);
+    // Fetch existing messages to classify incoming ones as new or changed.
+    // Reads through the provided executor so that, inside a regenerate
+    // transaction, this sees the post-truncation state and treats the freshly
+    // generated turn as new.
+    const existingMessages = await MessageModel.findByConversation(
+      conversationId,
+      executor,
+    );
     const uiMessages = messages as ChatMessage[];
     const newMessages = getMessagesNotYetPersisted({
       existingMessages,
@@ -2699,7 +2780,7 @@ async function persistNewMessages(
             createdAt: new Date(now + index),
           }));
 
-          await MessageModel.bulkCreate(messageData);
+          await MessageModel.bulkCreate(messageData, executor);
           persistedCount += messagesToStore.length;
 
           logger.info(
@@ -2715,6 +2796,7 @@ async function persistNewMessages(
       await MessageModel.updateContent(
         changedMessage.id,
         changedMessage.content,
+        executor,
       );
     }
 

@@ -354,11 +354,14 @@ export function ChatMessages({
     partIndex: number,
     newText: string,
   ) => {
+    // Non-destructive: only persist the (possibly edited) user text. The stale
+    // turn below it is removed by the server atomically when regenerate() runs,
+    // so an interrupted regenerate can't leave the conversation with the old
+    // turn deleted and no replacement.
     const data = await updateChatMessageMutation.mutateAsync({
       messageId,
       partIndex,
       text: newText,
-      deleteSubsequentMessages: true,
     });
 
     // Don't call onMessagesUpdate here - let onUserMessageEdit handle state

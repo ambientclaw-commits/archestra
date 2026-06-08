@@ -920,6 +920,7 @@ export function ChatPageContent({
     [messages, chatSession?.earlyToolUiStarts],
   );
   const sendMessage = chatSession?.sendMessage;
+  const regenerate = chatSession?.regenerate;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
@@ -2158,27 +2159,18 @@ export function ChatPageContent({
                       }
                       chatErrors={conversation?.chatErrors ?? []}
                       compactions={conversation?.compactions ?? []}
-                      onUserMessageEdit={(
-                        editedMessage,
-                        updatedMessages,
-                        editedPartIndex,
-                      ) => {
-                        if (setMessages && sendMessage) {
+                      onUserMessageEdit={(editedMessage, updatedMessages) => {
+                        if (setMessages && regenerate) {
                           userMessageJustEdited.current = true;
-                          const messagesWithoutEditedMessage =
-                            updatedMessages.slice(0, -1);
-                          setMessages(messagesWithoutEditedMessage);
-                          const editedPart =
-                            editedMessage.parts?.[editedPartIndex];
-                          const editedText =
-                            editedPart?.type === "text" ? editedPart.text : "";
-                          if (editedText?.trim()) {
-                            sendMessage({
-                              role: "user",
-                              parts: [{ type: "text", text: editedText }],
-                              metadata: { createdAt: new Date().toISOString() },
-                            });
-                          }
+                          // Keep the edited user message (its text is already
+                          // persisted by the non-destructive PATCH) and
+                          // regenerate from it. regenerate() re-requests with
+                          // trigger "regenerate-message"; the server truncates
+                          // the stale turn and writes the new one atomically.
+                          // We never append a new user message, so the user
+                          // turn is not duplicated.
+                          setMessages(updatedMessages);
+                          void regenerate({ messageId: editedMessage.id });
                         }
                       }}
                       error={error}
