@@ -2629,15 +2629,6 @@ function formatUnavailableToolErrorDetails(
 }
 
 /**
- * Persists new messages to the database for a conversation.
- * Strips images if browser streaming is enabled and handles empty message parts.
- *
- * @param conversationId - The conversation ID to persist messages for
- * @param messages - All messages (existing + new) to determine which ones to save
- * @param context - Context for logging (e.g., "onFinish", "onError")
- * @returns Promise<number> - Number of messages persisted
- */
-/**
  * Regenerate a turn: find the user message being regenerated, delete the stale
  * messages below it, and persist the freshly generated turn — atomically.
  *
@@ -2659,22 +2650,17 @@ async function persistRegeneratedTurn(params: {
   const { conversationId, requestMessages, finalMessages } = params;
   const existing = await MessageModel.findByConversation(conversationId);
 
-  // Anchor = the last request message (the user message being regenerated).
+  // The user message being regenerated is the last one the client sent.
+  // Everything stored below it is the stale turn to replace.
   const anchor = (requestMessages as ChatMessage[]).at(-1);
   const anchorIds = new Set(anchor ? getUiMessageIdentityIds(anchor) : []);
   const anchorIndex = existing.findIndex((row) =>
     storedMessageIds(row).some((id) => anchorIds.has(id)),
   );
+  const staleIds =
+    anchorIndex < 0 ? [] : existing.slice(anchorIndex + 1).map((row) => row.id);
 
-  // Stale = rows below the anchor that aren't part of the new thread.
-  const survivingIds = new Set(
-    (finalMessages as ChatMessage[]).flatMap(getUiMessageIdentityIds),
-  );
-  const staleIds = (anchorIndex < 0 ? [] : existing.slice(anchorIndex + 1))
-    .filter((row) => !storedMessageIds(row).some((id) => survivingIds.has(id)))
-    .map((row) => row.id);
-
-  // New = the freshly generated turn (final messages not already stored).
+  // The new turn is what the model just produced (not already stored).
   const newMessages = getMessagesNotYetPersisted({
     existingMessages: existing,
     uiMessages: finalMessages as ChatMessage[],
@@ -2706,6 +2692,15 @@ function storedMessageIds(row: { id: string; content: unknown }): string[] {
   return contentId ? [row.id, contentId] : [row.id];
 }
 
+/**
+ * Persists new messages to the database for a conversation.
+ * Strips images if browser streaming is enabled and handles empty message parts.
+ *
+ * @param conversationId - The conversation ID to persist messages for
+ * @param messages - All messages (existing + new) to determine which ones to save
+ * @param context - Context for logging (e.g., "onFinish", "onError")
+ * @returns Promise<number> - Number of messages persisted
+ */
 async function persistNewMessages(
   conversationId: string,
   messages: unknown[],
