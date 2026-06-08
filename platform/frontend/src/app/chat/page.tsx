@@ -203,7 +203,6 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
-  const userMessageJustEdited = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -920,7 +919,7 @@ export function ChatPageContent({
     [messages, chatSession?.earlyToolUiStarts],
   );
   const sendMessage = chatSession?.sendMessage;
-  const regenerate = chatSession?.regenerate;
+  const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
@@ -1203,11 +1202,6 @@ export function ChatPageContent({
   useEffect(() => {
     if (!setMessages || !sendMessage) {
       return;
-    }
-
-    // Clear the edit flag when status changes to ready (streaming finished)
-    if (status === "ready" && userMessageJustEdited.current) {
-      userMessageJustEdited.current = false;
     }
 
     const hasPendingInitialMessage =
@@ -2159,17 +2153,7 @@ export function ChatPageContent({
                       }
                       chatErrors={conversation?.chatErrors ?? []}
                       compactions={conversation?.compactions ?? []}
-                      onUserMessageEdit={(editedMessage, updatedMessages) => {
-                        if (setMessages && regenerate) {
-                          userMessageJustEdited.current = true;
-                          // Keep the user message and regenerate from it. Using
-                          // regenerate() (not a fresh sendMessage) avoids
-                          // duplicating the turn and signals the server to
-                          // replace the stale turn atomically.
-                          setMessages(updatedMessages);
-                          void regenerate({ messageId: editedMessage.id });
-                        }
-                      }}
+                      onRegenerateUserMessage={regenerateUserMessage}
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse

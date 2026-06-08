@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
@@ -111,7 +112,12 @@ interface ChatSession {
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
-  regenerate: ReturnType<typeof useChat>["regenerate"];
+  /** Re-run the assistant turn for a user message, optionally with edited text. */
+  regenerateUserMessage: (args: {
+    messageId: string;
+    partIndex: number;
+    text: string;
+  }) => Promise<void>;
   stop: () => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
@@ -418,6 +424,11 @@ function ChatSessionHook({
       lastCompaction: null,
     });
   const generateTitleMutation = useGenerateConversationTitle();
+  // Destructure the stable mutateAsync (not the whole mutation object, whose
+  // identity changes every render) so regenerateUserMessage stays referentially
+  // stable and doesn't retrigger the session-sync effect on every render.
+  const { mutateAsync: updateChatMessageAsync } =
+    useUpdateChatMessage(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
@@ -815,6 +826,29 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
+  // Save the user message's text, then re-run the assistant turn from it.
+  const regenerateUserMessage = useCallback(
+    async ({
+      messageId,
+      partIndex,
+      text,
+    }: {
+      messageId: string;
+      partIndex: number;
+      text: string;
+    }) => {
+      const data = await updateChatMessageAsync({ messageId, partIndex, text });
+      const canonical = data?.messages as UIMessage[] | undefined;
+      const anchor = canonical?.find((m) => m.id === messageId);
+      if (!canonical || !anchor) {
+        return;
+      }
+      setMessages(canonical);
+      void regenerate({ messageId: anchor.id });
+    },
+    [updateChatMessageAsync, setMessages, regenerate],
+  );
+
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref
   // update only — no state changes, no re-renders.
@@ -823,7 +857,7 @@ function ChatSessionHook({
     conversationId,
     messages: stableMessages,
     sendMessage,
-    regenerate,
+    regenerateUserMessage,
     stop,
     status,
     error,
@@ -851,7 +885,7 @@ function ChatSessionHook({
     conversationId,
     stableMessages,
     sendMessage,
-    regenerate,
+    regenerateUserMessage,
     stop,
     status,
     error,
