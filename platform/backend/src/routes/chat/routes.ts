@@ -887,97 +887,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const MAX_CONTEXT_TRIM_ATTEMPTS = 1;
                 let emptyResponseAttempts = 0;
                 let contextTrimAttempts = 0;
-                // the config the loop retries from; trim replaces its messages so
-                // a later empty-response retry reuses the trimmed payload instead
-                // of resending the original (too-large) one.
-                let currentConfig = streamTextConfig;
-                let result = streamText(currentConfig);
 
-                while (true) {
-                  const probe = await probeFirstRenderableEvent(
-                    result.fullStream[Symbol.asyncIterator](),
-                  );
-
-                  if (probe.kind === "renderable" || probe.kind === "aborted") {
-                    break;
-                  }
-
-                  if (probe.kind === "error") {
-                    const maxTokens = parseMaxInputTokens(probe.error);
-                    if (
-                      maxTokens !== null &&
-                      contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
-                    ) {
-                      contextTrimAttempts++;
-                      const trimmed = trimMessagesToTokenLimit({
-                        messages: modelMessages,
-                        maxTokens,
-                        systemPrompt,
-                      });
-                      logger.info(
-                        {
-                          maxTokens,
-                          originalMessages: modelMessages.length,
-                          trimmedMessages: trimmed.length,
-                          conversationId,
-                        },
-                        "[ContextTrimming] retrying with trimmed messages",
-                      );
-                      currentConfig = {
-                        ...currentConfig,
-                        messages: trimmed,
-                      };
-                      result = streamText(currentConfig);
-                      continue;
-                    }
-                    // Non-context error, or context-trim retries exhausted: fall
-                    // through to the merge so the existing toUIMessageStream
-                    // onError surfaces it (preserving e.g. unavailable-tool
-                    // handling). tee() replays the error.
-                    break;
-                  }
-
-                  // probe.kind === "empty": the provider finished with no content.
-                  emptyResponseAttempts++;
-                  const canRetryEmptyResponse =
-                    isRetryableEmptyFinishReason(probe.finishReason) &&
-                    emptyResponseAttempts < MAX_EMPTY_RESPONSE_ATTEMPTS;
-                  if (canRetryEmptyResponse) {
-                    logger.warn(
-                      {
-                        conversationId,
-                        finishReason: probe.finishReason,
-                        attempt: emptyResponseAttempts,
-                      },
-                      "[EmptyResponse] model produced no content, retrying",
-                    );
-                    result = streamText(currentConfig);
-                    continue;
-                  }
-
-                  // Exhausted retries (or a non-retryable finishReason): treat the
-                  // empty turn as a stream error. Persist first — this runs before
-                  // writer.merge(), so the stream onError/onFinish won't fire.
-                  if (!messagesPersisted && conversationId) {
-                    messagesPersisted = true;
-                    try {
-                      await persistNewMessages(
-                        conversationId,
-                        messages,
-                        "onExecuteError",
-                      );
-                    } catch (persistError) {
-                      logger.error(
-                        { persistError, conversationId },
-                        "Failed to persist messages during empty-response error",
-                      );
-                    }
-                  }
-                  throw new EmptyModelResponseError({
-                    finishReason: probe.finishReason,
-                    attempts: emptyResponseAttempts,
-                  });
-                }
+                // Stop hook (Claude Code semantics): fires when the model
+                // finishes responding; a blocking hook (exit 2) prevents the
+                // agent from stopping — its stderr is fed back to the model and
+                // another round streams into this same response. The payload's
+                // stop_hook_active is true on rounds caused by such a block, so
+                // hooks can avoid re-blocking forever; the round cap backstops
+                // a hook that blocks regardless.
+                const MAX_STOP_HOOK_CONTINUATIONS = 5;
+                // When hooks can't run at all, no Stop hook can ever block, so
+                // the loop below doesn't tie its completion to the round's
+                // onFinish callback — preserving the hookless stream-teardown
+                // semantics exactly.
+                const lifecycleHooksEnabled = hookDispatcherService.isEnabled;
+                let stopHookActive = false;
+                let stopHookContinuations = 0;
+                // Per-round message state: the UI thread the round's stream
+                // appends to, and the model messages it sends. Both advance when
+                // a blocking Stop hook starts another round.
+                let roundUiMessages = messages as UIMessage[];
+                let roundModelMessages = modelMessages;
 
                 // toUIMessageStream invokes onError twice for the same upstream
                 // error: first with the real error to build the chunk's
@@ -991,220 +921,429 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (e.g. two unavailable tools in one step) independently.
                 const returnedChatErrorPayloads = new Set<string>();
 
-                const modelUiStream = result.toUIMessageStream({
-                  originalMessages: messages as UIMessage[],
-                  // Give the streamed assistant message a stable id. Without
-                  // generateMessageId the AI SDK leaves the response message
-                  // id empty, so the persisted assistant row can't be matched
-                  // when the approval resume re-sends the turn — the resolved
-                  // turn is appended as new rows while the original
-                  // approval-requested row is orphaned and re-renders a stale
-                  // prompt on reload (#4030).
-                  generateMessageId: generateId,
-                  onError: (error) => {
-                    const incomingErrorMessage =
-                      error instanceof Error ? error.message : String(error);
-                    if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
-                      return incomingErrorMessage;
+                // One iteration per model round; only a blocking Stop hook
+                // loops back for another round.
+                while (true) {
+                  // the config the probe loop retries from; trim replaces its
+                  // messages so a later empty-response retry reuses the trimmed
+                  // payload instead of resending the original (too-large) one.
+                  let currentConfig: Parameters<typeof streamText>[0] = {
+                    ...streamTextConfig,
+                    messages: roundModelMessages,
+                  };
+                  let result = streamText(currentConfig);
+
+                  while (true) {
+                    const probe = await probeFirstRenderableEvent(
+                      result.fullStream[Symbol.asyncIterator](),
+                    );
+
+                    if (
+                      probe.kind === "renderable" ||
+                      probe.kind === "aborted"
+                    ) {
+                      break;
                     }
 
-                    const unavailableToolError =
-                      getUnavailableToolErrorDetails(error);
-                    if (unavailableToolError) {
-                      const serializedToolError =
-                        formatUnavailableToolErrorDetails(unavailableToolError);
-                      returnedChatErrorPayloads.add(serializedToolError);
-                      logger.info(
-                        {
-                          conversationId,
-                          unavailableToolError,
-                        },
-                        "Returning unavailable tool error as tool-level error",
-                      );
-                      return serializedToolError;
-                    }
-
-                    const traceContext = getActiveTraceContext();
-                    const correlationLogFields =
-                      getCorrelationLogFields(traceContext);
-
-                    // Use pre-built error from subagent if available (preserves correct provider),
-                    // otherwise map the error with the current provider
-                    const mappedError: ChatErrorResponse =
-                      error instanceof ProviderError
-                        ? error.chatErrorResponse
-                        : mapProviderError(error, provider);
-                    const fullError = { ...mappedError, ...traceContext };
-                    const errorForFrontend = slimChatErrorUi
-                      ? sanitizeChatErrorForFrontend(fullError)
-                      : fullError;
-
-                    // mapProviderError safely serializes raw errors, but add defensive try-catch
-                    let serializedChatError: string;
-                    try {
-                      serializedChatError = JSON.stringify(errorForFrontend);
-                    } catch (stringifyError) {
-                      logger.error(
-                        {
-                          stringifyError,
-                          errorCode: mappedError.code,
-                          ...correlationLogFields,
-                        },
-                        "Failed to stringify mapped error, returning minimal error",
-                      );
-                      serializedChatError = JSON.stringify(
-                        getMinimalFrontendError(errorForFrontend),
-                      );
-                    }
-                    returnedChatErrorPayloads.add(serializedChatError);
-
-                    activeRunError =
-                      error instanceof Error ? error.message : String(error);
-                    // Claim persistence before the async work below starts,
-                    // otherwise onFinish can race and also persist (duplicates).
-                    const shouldPersist =
-                      !messagesPersisted && !!conversationId;
-                    if (shouldPersist) {
-                      messagesPersisted = true;
-                    }
-
-                    (async () => {
-                      logger.error(
-                        {
-                          error,
-                          conversationId,
-                          agentId,
-                          ...correlationLogFields,
-                        },
-                        "Chat stream error occurred",
-                      );
-
-                      // Persist messages despite error so they have a valid ID for editing
-                      if (shouldPersist) {
-                        try {
-                          await persistNewMessages(
+                    if (probe.kind === "error") {
+                      const maxTokens = parseMaxInputTokens(probe.error);
+                      if (
+                        maxTokens !== null &&
+                        contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
+                      ) {
+                        contextTrimAttempts++;
+                        const trimmed = trimMessagesToTokenLimit({
+                          messages: roundModelMessages,
+                          maxTokens,
+                          systemPrompt,
+                        });
+                        logger.info(
+                          {
+                            maxTokens,
+                            originalMessages: roundModelMessages.length,
+                            trimmedMessages: trimmed.length,
                             conversationId,
-                            messages,
-                            "onError",
-                          );
-                        } catch (persistError) {
-                          // Log persistence error but don't prevent the error response
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during error handling",
-                          );
-                        }
+                          },
+                          "[ContextTrimming] retrying with trimmed messages",
+                        );
+                        currentConfig = {
+                          ...currentConfig,
+                          messages: trimmed,
+                        };
+                        result = streamText(currentConfig);
+                        continue;
                       }
-                    })().catch((err) => {
-                      // Log any errors from the async IIFE but don't crash
-                      logger.error(
-                        { err },
-                        "Unexpected error in onError async handler",
+                      // Non-context error, or context-trim retries exhausted: fall
+                      // through to the merge so the existing toUIMessageStream
+                      // onError surfaces it (preserving e.g. unavailable-tool
+                      // handling). tee() replays the error.
+                      break;
+                    }
+
+                    // probe.kind === "empty": the provider finished with no content.
+                    emptyResponseAttempts++;
+                    const canRetryEmptyResponse =
+                      isRetryableEmptyFinishReason(probe.finishReason) &&
+                      emptyResponseAttempts < MAX_EMPTY_RESPONSE_ATTEMPTS;
+                    if (canRetryEmptyResponse) {
+                      logger.warn(
+                        {
+                          conversationId,
+                          finishReason: probe.finishReason,
+                          attempt: emptyResponseAttempts,
+                        },
+                        "[EmptyResponse] model produced no content, retrying",
                       );
-                    });
+                      result = streamText(currentConfig);
+                      continue;
+                    }
 
-                    persistConversationChatError({
-                      conversationId,
-                      error: errorForFrontend,
-                    });
-
-                    logger.info(
-                      {
-                        mappedError: fullError,
-                        originalErrorType:
-                          error instanceof Error ? error.name : typeof error,
-                        willBeSentToFrontend: true,
-                        ...correlationLogFields,
-                      },
-                      "Returning mapped error to frontend via stream",
-                    );
-
-                    return serializedChatError;
-                  },
-                  onFinish: async ({ messages: finalMessages }) => {
-                    removeAbortListeners();
-                    stopActiveRunPolling();
-
-                    // Splice the turn's collected hook runs into the assistant
-                    // message(s) as inline `data-hook-run` parts before persisting,
-                    // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyHookRunsToMessages(
-                      finalMessages as unknown as ChatMessage[],
-                      hookRunCollector,
-                    );
-
-                    // Only persist if not already persisted by onError
+                    // Exhausted retries (or a non-retryable finishReason): treat the
+                    // empty turn as a stream error. Persist first — this runs before
+                    // writer.merge(), so the stream onError/onFinish won't fire.
                     if (!messagesPersisted && conversationId) {
+                      messagesPersisted = true;
                       try {
-                        if (trigger === "regenerate-message") {
-                          // Replace the regenerated turn atomically: delete the
-                          // stale messages below the anchor and write the new
-                          // turn in one transaction (no destructive pre-delete).
-                          await persistRegeneratedTurn({
-                            conversationId,
-                            requestMessages: messages,
-                            finalMessages: messagesToPersist,
-                          });
-                        } else {
-                          await persistNewMessages(
-                            conversationId,
-                            messagesToPersist,
-                            "onFinish",
-                          );
-                        }
-                        messagesPersisted = true;
-                      } catch (error) {
+                        await persistNewMessages(
+                          conversationId,
+                          messages,
+                          "onExecuteError",
+                        );
+                      } catch (persistError) {
                         logger.error(
-                          { error, conversationId },
-                          "Failed to persist messages during onFinish",
+                          { persistError, conversationId },
+                          "Failed to persist messages during empty-response error",
                         );
                       }
                     }
-                  },
-                });
+                    throw new EmptyModelResponseError({
+                      finishReason: probe.finishReason,
+                      attempts: emptyResponseAttempts,
+                    });
+                  }
 
-                // Inject data-tool-ui-start right after each tool-input-start
-                // chunk (see createToolUiStartTransform — kept out of onChunk so
-                // the empty-response probe can't emit it before its own tool).
-                writer.merge(
-                  modelUiStream.pipeThrough(
-                    createToolUiStartTransform({
-                      prefetchedUiResources,
-                      toolUiResourceUris,
-                    }),
-                  ),
-                );
+                  // Resolved by this round's onFinish so the loop knows whether a
+                  // blocking Stop hook started another round.
+                  let resolveRound: (round: {
+                    continueReason: string | null;
+                  }) => void = () => {};
+                  const roundDone = new Promise<{
+                    continueReason: string | null;
+                  }>((resolve) => {
+                    resolveRound = resolve;
+                  });
 
-                // Wait for the stream to complete and get usage data.
-                // Catch NoOutputGeneratedError (thrown when provider errors
-                // prevent any output) to avoid emitting a second, generic
-                // error event that would race with the detailed provider error
-                // already flowing through toUIMessageStream's onError.
-                const usage = await Promise.resolve(result.usage).catch(
-                  () => null,
-                );
+                  const modelUiStream = result.toUIMessageStream({
+                    originalMessages: roundUiMessages,
+                    // Give the streamed assistant message a stable id. Without
+                    // generateMessageId the AI SDK leaves the response message
+                    // id empty, so the persisted assistant row can't be matched
+                    // when the approval resume re-sends the turn — the resolved
+                    // turn is appended as new rows while the original
+                    // approval-requested row is orphaned and re-renders a stale
+                    // prompt on reload (#4030).
+                    generateMessageId: generateId,
+                    onError: (error) => {
+                      const incomingErrorMessage =
+                        error instanceof Error ? error.message : String(error);
+                      if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
+                        return incomingErrorMessage;
+                      }
 
-                // Write token usage data to the stream as a custom data part
-                if (usage) {
-                  logger.info(
-                    {
-                      conversationId,
-                      usage,
+                      const unavailableToolError =
+                        getUnavailableToolErrorDetails(error);
+                      if (unavailableToolError) {
+                        const serializedToolError =
+                          formatUnavailableToolErrorDetails(
+                            unavailableToolError,
+                          );
+                        returnedChatErrorPayloads.add(serializedToolError);
+                        logger.info(
+                          {
+                            conversationId,
+                            unavailableToolError,
+                          },
+                          "Returning unavailable tool error as tool-level error",
+                        );
+                        return serializedToolError;
+                      }
+
+                      const traceContext = getActiveTraceContext();
+                      const correlationLogFields =
+                        getCorrelationLogFields(traceContext);
+
+                      // Use pre-built error from subagent if available (preserves correct provider),
+                      // otherwise map the error with the current provider
+                      const mappedError: ChatErrorResponse =
+                        error instanceof ProviderError
+                          ? error.chatErrorResponse
+                          : mapProviderError(error, provider);
+                      const fullError = { ...mappedError, ...traceContext };
+                      const errorForFrontend = slimChatErrorUi
+                        ? sanitizeChatErrorForFrontend(fullError)
+                        : fullError;
+
+                      // mapProviderError safely serializes raw errors, but add defensive try-catch
+                      let serializedChatError: string;
+                      try {
+                        serializedChatError = JSON.stringify(errorForFrontend);
+                      } catch (stringifyError) {
+                        logger.error(
+                          {
+                            stringifyError,
+                            errorCode: mappedError.code,
+                            ...correlationLogFields,
+                          },
+                          "Failed to stringify mapped error, returning minimal error",
+                        );
+                        serializedChatError = JSON.stringify(
+                          getMinimalFrontendError(errorForFrontend),
+                        );
+                      }
+                      returnedChatErrorPayloads.add(serializedChatError);
+
+                      activeRunError =
+                        error instanceof Error ? error.message : String(error);
+                      // Claim persistence before the async work below starts,
+                      // otherwise onFinish can race and also persist (duplicates).
+                      const shouldPersist =
+                        !messagesPersisted && !!conversationId;
+                      if (shouldPersist) {
+                        messagesPersisted = true;
+                      }
+
+                      (async () => {
+                        logger.error(
+                          {
+                            error,
+                            conversationId,
+                            agentId,
+                            ...correlationLogFields,
+                          },
+                          "Chat stream error occurred",
+                        );
+
+                        // Persist messages despite error so they have a valid ID
+                        // for editing. roundUiMessages (not the request messages)
+                        // so prior Stop-hook continuation rounds survive too.
+                        if (shouldPersist) {
+                          try {
+                            await persistNewMessages(
+                              conversationId,
+                              roundUiMessages,
+                              "onError",
+                            );
+                          } catch (persistError) {
+                            // Log persistence error but don't prevent the error response
+                            logger.error(
+                              { persistError, conversationId },
+                              "Failed to persist messages during error handling",
+                            );
+                          }
+                        }
+                      })().catch((err) => {
+                        // Log any errors from the async IIFE but don't crash
+                        logger.error(
+                          { err },
+                          "Unexpected error in onError async handler",
+                        );
+                      });
+
+                      persistConversationChatError({
+                        conversationId,
+                        error: errorForFrontend,
+                      });
+
+                      logger.info(
+                        {
+                          mappedError: fullError,
+                          originalErrorType:
+                            error instanceof Error ? error.name : typeof error,
+                          willBeSentToFrontend: true,
+                          ...correlationLogFields,
+                        },
+                        "Returning mapped error to frontend via stream",
+                      );
+
+                      return serializedChatError;
                     },
-                    "Chat stream finished with usage data",
+                    onFinish: async ({ messages: finalMessages }) => {
+                      // Stop hook: fires when the model finished responding on
+                      // its own — not on user interrupt (Claude Code skips it
+                      // there too), a stream error, or a swap-agent stop
+                      // condition (finishReason !== "stop"). Wrapped in
+                      // try/catch and fails open — hooks must never break chat.
+                      let continueReason: string | null = null;
+                      const finishReason = await Promise.resolve(
+                        result.finishReason,
+                      ).catch(() => null);
+                      if (
+                        finishReason === "stop" &&
+                        !activeRunError &&
+                        !chatAbortController.signal.aborted
+                      ) {
+                        try {
+                          const stopResult = await hookDispatcherService.fire({
+                            event: "stop",
+                            conversationId,
+                            agentId,
+                            organizationId,
+                            userId: conversationUserId,
+                            fields: { stop_hook_active: stopHookActive },
+                          });
+                          hookRunCollector.push(
+                            ...toCollectedRuns(stopResult.runs, {
+                              kind: "turn-end",
+                            }),
+                          );
+                          if (stopResult.decision === "block") {
+                            if (
+                              stopHookContinuations <
+                              MAX_STOP_HOOK_CONTINUATIONS
+                            ) {
+                              continueReason =
+                                stopResult.reason ?? "Blocked by hook";
+                            } else {
+                              logger.warn(
+                                { conversationId, stopHookContinuations },
+                                "Stop hook still blocking at the continuation cap, finishing the turn",
+                              );
+                            }
+                          }
+                        } catch (error) {
+                          logger.warn(
+                            { error, conversationId },
+                            "Stop hook dispatch failed, proceeding",
+                          );
+                        }
+                      }
+
+                      if (continueReason) {
+                        // The agent must not stop: skip teardown and persistence
+                        // (the final round persists the whole turn — these
+                        // messages are carried forward via originalMessages) and
+                        // hand the loop the state for the next round.
+                        roundUiMessages = finalMessages;
+                        resolveRound({ continueReason });
+                        return;
+                      }
+
+                      removeAbortListeners();
+                      stopActiveRunPolling();
+
+                      // Splice the turn's collected hook runs into the assistant
+                      // message(s) as inline `data-hook-run` parts before persisting,
+                      // so they survive refresh and sit at their lifecycle position.
+                      const messagesToPersist = applyHookRunsToMessages(
+                        finalMessages as unknown as ChatMessage[],
+                        hookRunCollector,
+                      );
+
+                      // Only persist if not already persisted by onError
+                      if (!messagesPersisted && conversationId) {
+                        try {
+                          if (trigger === "regenerate-message") {
+                            // Replace the regenerated turn atomically: delete the
+                            // stale messages below the anchor and write the new
+                            // turn in one transaction (no destructive pre-delete).
+                            await persistRegeneratedTurn({
+                              conversationId,
+                              requestMessages: messages,
+                              finalMessages: messagesToPersist,
+                            });
+                          } else {
+                            await persistNewMessages(
+                              conversationId,
+                              messagesToPersist,
+                              "onFinish",
+                            );
+                          }
+                          messagesPersisted = true;
+                        } catch (error) {
+                          logger.error(
+                            { error, conversationId },
+                            "Failed to persist messages during onFinish",
+                          );
+                        }
+                      }
+
+                      resolveRound({ continueReason: null });
+                    },
+                  });
+
+                  // Inject data-tool-ui-start right after each tool-input-start
+                  // chunk (see createToolUiStartTransform — kept out of onChunk so
+                  // the empty-response probe can't emit it before its own tool).
+                  writer.merge(
+                    modelUiStream.pipeThrough(
+                      createToolUiStartTransform({
+                        prefetchedUiResources,
+                        toolUiResourceUris,
+                      }),
+                    ),
                   );
 
-                  // Send usage data as a custom data part
-                  // The type must be 'data-<name>' format for the AI SDK to recognize it
-                  writer.write({
-                    type: "data-token-usage",
-                    data: {
-                      inputTokens: usage.inputTokens,
-                      outputTokens: usage.outputTokens,
-                      totalTokens: usage.totalTokens,
-                      cacheReadTokens: usage.cachedInputTokens,
-                    } satisfies TokenUsage,
-                  });
+                  // Wait for this round's stream to be fully consumed (onFinish
+                  // resolves it) and learn whether a blocking Stop hook started
+                  // another round.
+                  const { continueReason } = lifecycleHooksEnabled
+                    ? await roundDone
+                    : { continueReason: null };
+
+                  // Wait for the stream to complete and get usage data.
+                  // Catch NoOutputGeneratedError (thrown when provider errors
+                  // prevent any output) to avoid emitting a second, generic
+                  // error event that would race with the detailed provider error
+                  // already flowing through toUIMessageStream's onError.
+                  const usage = await Promise.resolve(result.usage).catch(
+                    () => null,
+                  );
+
+                  // Write token usage data to the stream as a custom data part
+                  if (usage) {
+                    logger.info(
+                      {
+                        conversationId,
+                        usage,
+                      },
+                      "Chat stream finished with usage data",
+                    );
+
+                    // Send usage data as a custom data part
+                    // The type must be 'data-<name>' format for the AI SDK to recognize it
+                    writer.write({
+                      type: "data-token-usage",
+                      data: {
+                        inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens,
+                        totalTokens: usage.totalTokens,
+                        cacheReadTokens: usage.cachedInputTokens,
+                      } satisfies TokenUsage,
+                    });
+                  }
+
+                  if (!continueReason) {
+                    break;
+                  }
+
+                  // A Stop hook blocked the agent from stopping (Claude Code
+                  // semantics): feed the hook's stderr back to the model as a
+                  // user message and stream another round into this response.
+                  stopHookContinuations++;
+                  stopHookActive = true;
+                  const assistantModelMessages = await Promise.resolve(
+                    result.response,
+                  )
+                    .then((response) => response.messages)
+                    .catch(() => []);
+                  roundModelMessages = [
+                    ...roundModelMessages,
+                    ...assistantModelMessages,
+                    {
+                      role: "user",
+                      content: `Stop hook feedback:\n${continueReason}`,
+                    },
+                  ];
                 }
 
                 clearInterval(heartbeatInterval);
@@ -1972,6 +2111,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           logger.warn(
             { error, conversationId: id },
             "Failed to close browser tab on conversation deletion",
+          );
+        }
+      }
+
+      // SessionEnd hook (Claude Code semantics): deleting the conversation is
+      // how a session terminates here, so fire it before the rows (including
+      // the sandbox replay log the hook runs against) are deleted. It cannot
+      // block — the decision is ignored and a failure never prevents deletion.
+      if (conversation?.agentId) {
+        try {
+          await hookDispatcherService.fire({
+            event: "session_end",
+            conversationId: id,
+            agentId: conversation.agentId,
+            organizationId,
+            // The conversation's user id — the sandbox is keyed per
+            // org/user/conversation.
+            userId: conversation.userId,
+            fields: { reason: "delete" },
+          });
+        } catch (error) {
+          logger.warn(
+            { error, conversationId: id },
+            "SessionEnd hook dispatch failed, proceeding with deletion",
           );
         }
       }

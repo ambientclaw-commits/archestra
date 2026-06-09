@@ -128,4 +128,6 @@ const HOOK_EVENT_NAMES: Record<HookEvent, string> = {
   session_start: "SessionStart",
   pre_tool_use: "PreToolUse",
   post_tool_use: "PostToolUse",
+  stop: "Stop",
+  session_end: "SessionEnd",
 };
