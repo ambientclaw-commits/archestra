@@ -153,6 +153,30 @@ describe("skillSandboxRuntimeService", () => {
 });
 
 describe("__internals", () => {
+  test("requirementsInstallCommands picks up root and nested requirements.txt in path order", () => {
+    const commands = __internals.requirementsInstallCommands("alpha", [
+      "tools/extract.py",
+      "tools/requirements.txt",
+      "requirements.txt",
+      "references/notes.md",
+    ]);
+    expect(commands.map((c) => c.command)).toEqual([
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/requirements.txt'",
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/tools/requirements.txt'",
+    ]);
+    expect(commands.every((c) => c.cwd === "/home/sandbox")).toBe(true);
+  });
+
+  test("requirementsInstallCommands ignores files merely named like requirements", () => {
+    expect(
+      __internals.requirementsInstallCommands("alpha", [
+        "docs/requirements.txt.md",
+        "old-requirements.txt",
+        "tools/requirements.md",
+      ]),
+    ).toEqual([]);
+  });
+
   test("resolveArtifactPath joins relative paths against defaultCwd", () => {
     expect(
       __internals.resolveArtifactPath({

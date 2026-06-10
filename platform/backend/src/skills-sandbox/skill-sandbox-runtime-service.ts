@@ -335,10 +335,11 @@ class SkillSandboxRuntimeService {
 
   /**
    * Mount an immutable skill version into a sandbox: append a `skill_mount`
-   * replay event pinning the version and — if the version ships a
-   * `requirements.txt` — a `uv pip install` command right after it, both in one
-   * transaction so the deps can never be lost. No Dagger work happens here; the
-   * mount becomes part of the recipe and materializes on the next run/export.
+   * replay event pinning the version and — for every `requirements.txt` the
+   * version ships (root or nested, e.g. `tools/requirements.txt`) — an install
+   * command right after it, all in one transaction so the deps can never be
+   * lost. No Dagger work happens here; the mount becomes part of the recipe and
+   * materializes on the next run/export.
    *
    * Idempotent and race-safe: `appendSkillMount` inserts under a
    * `(sandbox_id, skill_id)` unique constraint, so a concurrent or repeated
@@ -359,20 +360,10 @@ class SkillSandboxRuntimeService {
         validateSkillMountFilePath(params.skill.skillName, file.path);
       }
 
-      // install the skill's requirements into the shared uv project as a replay
-      // command right after the mount, mirroring how user commands replay. We
-      // use `uv add` (not bare `uv pip install`) so the deps are recorded in
-      // pyproject/uv.lock — otherwise a later model `uv add <pkg>` could prune
-      // them as extraneous on sync. `--project` lets it run from any cwd.
-      const installCommand = files.some((f) => f.path === REQUIREMENTS_FILE)
-        ? {
-            command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
-              `${skillRootPath(params.skill.skillName)}/${REQUIREMENTS_FILE}`,
-            )}`,
-            cwd: SKILL_SANDBOX_HOME,
-            timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
-          }
-        : undefined;
+      const installCommands = requirementsInstallCommands(
+        params.skill.skillName,
+        files.map((file) => file.path),
+      );
 
       let mount: Awaited<
         ReturnType<typeof SkillSandboxReplayEventModel.appendSkillMount>
@@ -386,7 +377,7 @@ class SkillSandboxRuntimeService {
             skillName: params.skill.skillName,
             skillVersionId: params.skill.skillVersionId,
           },
-          installCommand,
+          installCommands,
         });
       } catch (dbError) {
         throw new SkillSandboxError(
@@ -777,6 +768,33 @@ function validateSkillMountFilePath(skillName: string, path: string): void {
 }
 
 /**
+ * One install command per `requirements.txt` the version ships — root or
+ * nested (skills commonly keep tool deps in `tools/requirements.txt`) — in
+ * path-sorted order so the replay log is deterministic. We use `uv add` (not
+ * bare `uv pip install`) so the deps are recorded in pyproject/uv.lock —
+ * otherwise a later model `uv add <pkg>` could prune them as extraneous on
+ * sync. `--project` lets it run from any cwd.
+ */
+function requirementsInstallCommands(
+  skillName: string,
+  filePaths: string[],
+): Array<{ command: string; cwd: string; timeoutSeconds: number }> {
+  return filePaths
+    .filter(
+      (path) =>
+        path === REQUIREMENTS_FILE || path.endsWith(`/${REQUIREMENTS_FILE}`),
+    )
+    .sort()
+    .map((path) => ({
+      command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
+        `${skillRootPath(skillName)}/${path}`,
+      )}`,
+      cwd: SKILL_SANDBOX_HOME,
+      timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+    }));
+}
+
+/**
  * Stage the conversation's chat attachments into the default sandbox as upload
  * replay events under {@link ATTACHMENTS_DIR}, so the model can use files the
  * user attached without knowing any attachment id. Idempotent and multi-turn
@@ -940,6 +958,7 @@ export const __internals = {
   resolveArtifactPath,
   validateUploadPath,
   validateSkillMountFilePath,
+  requirementsInstallCommands,
   stageConversationAttachments,
   planAttachmentStaging,
   assignAttachmentPaths,

@@ -139,19 +139,23 @@ class SkillSandboxReplayEventModel {
    * activation of the same skill is a no-op that returns `null` without
    * appending a second mount (or its install command).
    *
-   * When the version ships a `requirements.txt`, `installCommand` is appended as
-   * a `command` event in the SAME transaction right after the mount, so a mount
-   * can never be recorded without its install (which would leave the deps
-   * permanently missing once the idempotency check skips the skill on
-   * re-activation).
+   * When the version ships `requirements.txt` files, `installCommands` are
+   * appended as `command` events in the SAME transaction right after the mount
+   * (in the given order), so a mount can never be recorded without its installs
+   * (which would leave the deps permanently missing once the idempotency check
+   * skips the skill on re-activation).
    */
   static async appendSkillMount(params: {
     sandboxId: string;
     organizationId: string;
     mount: SkillMountRef;
-    installCommand?: { command: string; cwd: string; timeoutSeconds: number };
+    installCommands?: Array<{
+      command: string;
+      cwd: string;
+      timeoutSeconds: number;
+    }>;
   }): Promise<SkillSandboxSkillMount | null> {
-    const { sandboxId, organizationId, mount, installCommand } = params;
+    const { sandboxId, organizationId, mount, installCommands } = params;
 
     return await db.transaction(async (tx) => {
       const [row] = await tx
@@ -180,7 +184,7 @@ class SkillSandboxReplayEventModel {
         skillMountId: row.id,
       });
 
-      if (installCommand) {
+      for (const installCommand of installCommands ?? []) {
         const [commandRow] = await tx
           .insert(schema.skillSandboxCommandsTable)
           .values({
