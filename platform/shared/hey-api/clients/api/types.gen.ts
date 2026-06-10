@@ -25656,7 +25656,7 @@ export type GetHooksResponses = {
         id: string;
         organizationId: string;
         agentId: string;
-        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop' | 'session_end';
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop';
         fileName: string;
         content: string;
         requirements: Array<string>;
@@ -25671,7 +25671,7 @@ export type GetHooksResponse = GetHooksResponses[keyof GetHooksResponses];
 export type CreateHookData = {
     body: {
         agentId: string;
-        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop' | 'session_end';
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop';
         fileName: string;
         content: string;
         requirements?: Array<string>;
@@ -25755,7 +25755,7 @@ export type CreateHookResponses = {
         id: string;
         organizationId: string;
         agentId: string;
-        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop' | 'session_end';
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop';
         fileName: string;
         content: string;
         requirements: Array<string>;
@@ -25854,7 +25854,7 @@ export type DeleteHookResponse = DeleteHookResponses[keyof DeleteHookResponses];
 
 export type UpdateHookData = {
     body: {
-        event?: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop' | 'session_end';
+        event?: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop';
         fileName?: string;
         content?: string;
         requirements?: Array<string>;
@@ -25940,7 +25940,7 @@ export type UpdateHookResponses = {
         id: string;
         organizationId: string;
         agentId: string;
-        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop' | 'session_end';
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use' | 'stop';
         fileName: string;
         content: string;
         requirements: Array<string>;

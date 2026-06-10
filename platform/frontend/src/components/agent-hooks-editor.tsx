@@ -41,7 +41,6 @@ const HOOK_EVENTS: { value: HookEvent; label: string }[] = [
   { value: "pre_tool_use", label: "Pre tool use" },
   { value: "post_tool_use", label: "Post tool use" },
   { value: "stop", label: "Stop" },
-  { value: "session_end", label: "Session end" },
 ];
 
 const EVENT_LABELS: Record<HookEvent, string> = Object.fromEntries(

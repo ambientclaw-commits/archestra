@@ -63,23 +63,20 @@ describe("hook routes", () => {
       expect(body.id).toBeDefined();
     });
 
-    test.for([
-      "stop",
-      "session_end",
-    ] as const)("accepts the %s lifecycle event", async (event) => {
+    test("accepts the stop lifecycle event", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/hooks",
         payload: {
           agentId,
-          event,
+          event: "stop",
           fileName: "notify.sh",
           content: "echo done",
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({ agentId, event });
+      expect(response.json()).toMatchObject({ agentId, event: "stop" });
     });
 
     test("rejects an invalid file extension", async () => {

@@ -2115,30 +2115,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // SessionEnd hook (Claude Code semantics): deleting the conversation is
-      // how a session terminates here, so fire it before the rows (including
-      // the sandbox replay log the hook runs against) are deleted. It cannot
-      // block — the decision is ignored and a failure never prevents deletion.
-      if (conversation?.agentId) {
-        try {
-          await hookDispatcherService.fire({
-            event: "session_end",
-            conversationId: id,
-            agentId: conversation.agentId,
-            organizationId,
-            // The conversation's user id — the sandbox is keyed per
-            // org/user/conversation.
-            userId: conversation.userId,
-            fields: { reason: "delete" },
-          });
-        } catch (error) {
-          logger.warn(
-            { error, conversationId: id },
-            "SessionEnd hook dispatch failed, proceeding with deletion",
-          );
-        }
-      }
-
       await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },

@@ -11,7 +11,6 @@ export const HookEventSchema = z.enum([
   "pre_tool_use",
   "post_tool_use",
   "stop",
-  "session_end",
 ]);
 export type HookEvent = z.infer<typeof HookEventSchema>;
 

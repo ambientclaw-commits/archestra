@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import config from "@/config";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
-import { ConversationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -386,96 +385,5 @@ describe("POST /api/chat lifecycle hooks", () => {
     // Give the final round a beat to confirm no further rounds start.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mockStreamText).toHaveBeenCalledTimes(6);
-  });
-});
-
-describe("DELETE /api/chat/conversations/:id SessionEnd hook", () => {
-  let app: FastifyInstanceWithZod;
-  let user: User;
-  let organizationId: string;
-  let conversationId: string;
-  let agentId: string;
-
-  beforeEach(
-    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
-      user = await makeUser();
-      const organization = await makeOrganization({ name: "Test Org" });
-      organizationId = organization.id;
-
-      const agent = await makeAgent({
-        organizationId,
-        name: "Router Agent",
-        systemPrompt: "",
-      });
-      agentId = agent.id;
-      const conversation = await makeConversation(agent.id, {
-        userId: user.id,
-        organizationId,
-      });
-      conversationId = conversation.id;
-
-      app = createFastifyInstance();
-      app.addHook("onRequest", async (request) => {
-        (request as typeof request & { user: User }).user = user;
-        (
-          request as typeof request & { organizationId: string }
-        ).organizationId = organizationId;
-      });
-
-      const { default: chatRoutes } = await import("./routes");
-      await app.register(chatRoutes);
-    },
-  );
-
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await app.close();
-  });
-
-  test("fires session_end (reason: delete) before deleting the conversation", async () => {
-    const fireSpy = vi
-      .spyOn(hookDispatcherService, "fire")
-      .mockResolvedValue({ decision: "proceed", runs: [] });
-
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/api/chat/conversations/${conversationId}`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(fireSpy).toHaveBeenCalledWith({
-      event: "session_end",
-      conversationId,
-      agentId,
-      organizationId,
-      userId: user.id,
-      fields: { reason: "delete" },
-    });
-
-    const deleted = await ConversationModel.findById({
-      id: conversationId,
-      userId: user.id,
-      organizationId,
-    });
-    expect(deleted).toBeNull();
-  });
-
-  test("a failing SessionEnd hook never prevents deletion", async () => {
-    vi.spyOn(hookDispatcherService, "fire").mockRejectedValue(
-      new Error("dispatcher exploded"),
-    );
-
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/api/chat/conversations/${conversationId}`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const deleted = await ConversationModel.findById({
-      id: conversationId,
-      userId: user.id,
-      organizationId,
-    });
-    expect(deleted).toBeNull();
   });
 });
