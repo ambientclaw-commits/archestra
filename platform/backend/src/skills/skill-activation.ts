@@ -175,9 +175,11 @@ const FRAME_TAG_NAMES = [
 // tag name must follow the bracket immediately — the platform never emits
 // whitespace inside a frame tag, and tolerating it would both over-defang
 // innocent text (`a < skill.level`) and, with quantifiers around the slash,
-// open a quadratic-backtracking hole on `<` + long whitespace runs. The
-// lookahead keeps the tag name in place so only the bracket is defanged.
+// open a quadratic-backtracking hole on `<` + long whitespace runs. The name
+// must also END like a tag name does in our frames (whitespace, `>`, `/`, or
+// end of text), so `<skill-level>`/`<skill.file>` stay literal. The lookahead
+// keeps the tag name in place so only the bracket is defanged.
 const FRAME_TAG_PATTERN = new RegExp(
-  `<(?=/?(?:${FRAME_TAG_NAMES.join("|")})\\b)`,
+  `<(?=/?(?:${FRAME_TAG_NAMES.join("|")})(?=[\\s/>]|$))`,
   "gi",
 );

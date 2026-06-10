@@ -781,19 +781,24 @@ function requirementsInstallCommands(
   skillName: string,
   filePaths: string[],
 ): Array<{ command: string; cwd: string; timeoutSeconds: number }> {
-  return filePaths
-    .filter(
-      (path) =>
-        path === REQUIREMENTS_FILE || path.endsWith(`/${REQUIREMENTS_FILE}`),
-    )
-    .sort()
-    .map((path) => ({
-      command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
-        `${skillRootPath(skillName)}/${path}`,
-      )}`,
-      cwd: SKILL_SANDBOX_HOME,
-      timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
-    }));
+  return (
+    filePaths
+      .filter(
+        (path) =>
+          path === REQUIREMENTS_FILE || path.endsWith(`/${REQUIREMENTS_FILE}`),
+      )
+      // references/ holds documentation by the skill file-kind taxonomy — a
+      // requirements.txt there is a doc fixture, not an install request
+      .filter((path) => !path.startsWith("references/"))
+      .sort()
+      .map((path) => ({
+        command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
+          `${skillRootPath(skillName)}/${path}`,
+        )}`,
+        cwd: SKILL_SANDBOX_HOME,
+        timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+      }))
+  );
 }
 
 /**

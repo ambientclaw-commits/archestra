@@ -4,10 +4,10 @@ This is the canonical mapping the model applies when turning `inventory.json` in
 `migration_plan.json`. Each decision references an inventory item by `id` and names a
 `target_kind`; `apply.py` builds the actual payload deterministically.
 
-| Source (inventory `kind`) | `target_kind` | Confidence | Notes |
+| Source (inventory `kind`, or id prefix where one kind has shapes) | `target_kind` | Confidence | Notes |
 |---|---|---|---|
 | `claude_md` (root CLAUDE.md) | `agent` | clean | becomes the **primary agent**'s systemPrompt; one per setup, no model binding (inherits org default) |
-| `claude_md:*` (AGENTS.md, `.cursorrules`, `.cursor/rules/*`, copilot-instructions.md) | `skill` or fold into the primary `agent` | best-effort | other-ecosystem instruction files; fold short global rules into the agent prompt (manual edit of the `claude_md` decision body), keep self-contained ones as skills |
+| `claude_md:*` (AGENTS.md, `.cursorrules`, `.cursor/rules/*`, copilot-instructions.md) | `skill` or fold into the primary `agent` | best-effort | other-ecosystem instruction files. To fold, append the file's text to the root `claude_md` item's `body` in `inventory.json` before apply (decisions carry no body override) and `skip` the `claude_md:*` item. Cursor `.mdc` scoping (`globs`, `alwaysApply`) is NOT preserved — the skill is opt-in by description; flag always-applied rules in the report |
 | `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files |
 | `subagent` (`.claude/agents/*.md`) | `skill` (preferred) or `agent` | best-effort | default to skill; tool allowlist is **documented, not enforced** |
 | `command` (`.claude/commands/*.md`) | `skill` | best-effort | slash command body → skill |

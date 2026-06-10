@@ -58,7 +58,7 @@ from contracts import (
     require_dict,
     to_jsonable,
 )
-from frontmatter import parse_frontmatter
+from frontmatter import ParsedDoc, parse_frontmatter
 
 # events whose hooks can block the action -- candidates for a tool-invocation policy.
 _BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
@@ -189,13 +189,18 @@ def discover(root: Path) -> Inventory:
         for line in doc_unparsed:
             inv.unknowns.append(f"{rel} (unparsed frontmatter: {line.strip()})")
 
+    def warn_doc_secrets(doc: ParsedDoc, rel: str) -> None:
+        _warn_if_secret(doc.body, rel, inv.warnings)
+        # frontmatter is stored verbatim on items, so scan it too
+        _warn_if_secret(json.dumps(doc.frontmatter), f"{rel} (frontmatter)", inv.warnings)
+
     # 1. root CLAUDE.md -> primary agent
     for cm in (root / "CLAUDE.md", root / ".claude" / "CLAUDE.md"):
         if _is_contained_file(cm, root):
             doc = parse_frontmatter(read(cm))
             rel = cm.relative_to(root).as_posix()
             note_unparsed(doc.unparsed_lines, rel)
-            _warn_if_secret(doc.body, rel, inv.warnings)
+            warn_doc_secrets(doc, rel)
             inv.items.append(ClaudeMdItem(
                 id="claude_md", name=root.name or "primary", path=rel,
                 summary="root orchestration prompt -> primary agent system prompt",
@@ -208,6 +213,7 @@ def discover(root: Path) -> Inventory:
     # skills. AGENTS.md is the cross-vendor convention; Cursor and Copilot
     # rules are markdown instructions too. The mapping step decides whether to
     # fold each into the primary agent's system prompt or keep it as a skill.
+    cursor_rules_dir = root / ".cursor" / "rules"
     instruction_files = [
         p for p in (
             root / "AGENTS.md",
@@ -216,14 +222,16 @@ def discover(root: Path) -> Inventory:
         )
         if _is_contained_file(p, root)
     ] + [
-        p for p in sorted((root / ".cursor" / "rules").glob("*"))
-        if _is_contained_file(p, root) and p.suffix in (".md", ".mdc")
+        # containment is checked against the rules dir itself so a symlink
+        # can't pull an arbitrary repo file into the inventory as a "rule"
+        p for p in sorted(cursor_rules_dir.glob("*"))
+        if _is_contained_file(p, cursor_rules_dir) and p.suffix in (".md", ".mdc")
     ]
     for f in instruction_files:
         doc = parse_frontmatter(read(f))
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
-        _warn_if_secret(doc.body, rel, inv.warnings)
+        warn_doc_secrets(doc, rel)
         name = f.stem.lstrip(".") or f.name.lstrip(".")
         inv.items.append(ClaudeMdItem(
             id=f"claude_md:{rel}", name=name, path=rel,
@@ -243,7 +251,7 @@ def discover(root: Path) -> Inventory:
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
-        _warn_if_secret(doc.body, rel, inv.warnings)
+        warn_doc_secrets(doc, rel)
         description = _meta_str(doc.frontmatter, "description")
         tools = doc.frontmatter.get("tools")
         inv.items.append(SubagentItem(
@@ -288,7 +296,7 @@ def discover(root: Path) -> Inventory:
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
-        _warn_if_secret(doc.body, rel, inv.warnings)
+        warn_doc_secrets(doc, rel)
         inv.items.append(CommandItem(
             id=f"command:{name}", name=name, path=rel,
             summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
@@ -303,9 +311,13 @@ def discover(root: Path) -> Inventory:
     # (default: the toolset; see entity-mapping.md). Migrate one shape, never
     # both — they bundle the same scripts.
     tools_dir = root / "tools"
+    # same filters as the toolset tree walk below (tools_dir containment, no
+    # dotfiles) so every entrypoint is guaranteed to be a bundled file
     tool_scripts = [
         f for f in sorted(tools_dir.glob("*.py"))
-        if _is_contained_file(f, root) and f.name != "__init__.py"
+        if _is_contained_file(f, tools_dir)
+        and not f.name.startswith(".")
+        and f.name != "__init__.py"
     ]
     if tool_scripts:
         # the tools' own requirements are re-rooted to each generated skill's
@@ -330,10 +342,15 @@ def discover(root: Path) -> Inventory:
             )
 
         # granular items: one per script, for plans that migrate independent
-        # single-file tools separately
+        # single-file tools separately. scripts are secret-scanned here, once;
+        # the tree walk below skips re-scanning them.
+        script_rels: set[str] = set()
         for f in tool_scripts:
             bundled = _read_bundled(f, root)
             entry = bundled.path
+            script_rels.add(entry)
+            if bundled.encoding == "utf8":
+                _warn_if_secret(bundled.content, entry, inv.warnings)
             files = [bundled] + ([bundled_reqs] if bundled_reqs is not None else [])
             inv.items.append(LocalToolItem(
                 id=f"local_tool:{f.stem}", name=f.stem, path=entry,
@@ -355,7 +372,7 @@ def discover(root: Path) -> Inventory:
             if any(p.startswith(".") or p == "__pycache__" for p in rel_parts) or f.suffix == ".pyc":
                 continue
             tree_file = _read_bundled(f, root)
-            if tree_file.encoding == "utf8":
+            if tree_file.encoding == "utf8" and tree_file.path not in script_rels:
                 _warn_if_secret(tree_file.content, tree_file.path, inv.warnings)
             bundles.append(tree_file)
             mark(f)
@@ -498,7 +515,15 @@ def _kind_counts(inv: Inventory) -> str:
 
 
 def _print_summary(inv: Inventory, out: Path) -> None:
-    likely = sum(1 for it in inv.items if it.kind in {"claude_md", "skill", "command", "local_tool"})
+    # local tools are emitted in two shapes (granular + toolset) but only one
+    # migrates, so count the toolset alone when both are present
+    has_toolset = any(it.id.startswith("local_toolset:") for it in inv.items)
+    likely = sum(
+        1 for it in inv.items
+        if it.kind in {"claude_md", "skill", "command"}
+        or (it.kind == "local_tool"
+            and (not has_toolset or it.id.startswith("local_toolset:")))
+    )
     review = sum(
         1 for it in inv.items
         if it.kind in {"subagent", "mcp_server"} or (isinstance(it, HookItem) and it.data.intent == "guard")

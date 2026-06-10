@@ -117,6 +117,30 @@ def test_toolset_bundles_whole_tree_but_entrypoints_stay_top_level(tmp_path: Pat
     assert granular_ids == {"local_tool:extract"}
 
 
+def test_dotfile_scripts_are_neither_entrypoints_nor_granular_items(tmp_path: Path) -> None:
+    inv = discover(
+        _make_project(
+            tmp_path,
+            {"tools/ok.py": "print('x')\n", "tools/.hidden.py": "key = 'sk-abcdefghijklmnop'\n"},
+        )
+    )
+    item = _toolset(inv)
+    assert item.data.entrypoints == ["tools/ok.py"]
+    assert [f.path for f in item.files] == ["tools/ok.py"]
+    assert {i.id for i in _tool_items(inv)} == {"local_tool:ok", item.id}
+
+
+def test_granular_script_secrets_are_warned_exactly_once(tmp_path: Path) -> None:
+    inv = discover(
+        _make_project(
+            tmp_path,
+            {"tools/leaky.py": "key = 'sk-abcdefghijklmnop'\n"},
+        )
+    )
+    hits = [w for w in inv.warnings if "tools/leaky.py" in w]
+    assert len(hits) == 1
+
+
 def test_symlink_escaping_tools_dir_is_not_bundled(tmp_path: Path) -> None:
     root = _make_project(
         tmp_path,
@@ -165,3 +189,44 @@ def test_toolset_skill_without_requirements_omits_install_note() -> None:
     )
     content, _ = _skill_content_for(item, "p-tools")
     assert "automatically when the skill is mounted" not in content
+    assert "Shared toolset skill" in content
+
+
+def test_per_tool_skill_does_not_claim_to_be_a_toolset() -> None:
+    item = LocalToolItem(
+        id="local_tool:a",
+        name="a",
+        path="tools/a.py",
+        summary="s",
+        data=LocalToolData(entrypoints=["tools/a.py"]),
+        files=[BundledFile(path="tools/a.py", content="print()\n", encoding="utf8")],
+    )
+    content, _ = _skill_content_for(item, "a")
+    assert "Shared toolset" not in content
+    assert "wraps the local python tool `tools/a.py`" in content
+    assert "python3 /skills/a/tools/a.py" in content
+
+
+def test_instruction_file_frontmatter_secrets_are_warned(tmp_path: Path) -> None:
+    inv = discover(
+        _make_project(
+            tmp_path,
+            {
+                "tools/ok.py": "print('x')\n",
+                "AGENTS.md": "---\napi_hint: sk-abcdefghijklmnop\n---\n\nbody\n",
+            },
+        )
+    )
+    assert any("AGENTS.md (frontmatter)" in w for w in inv.warnings)
+
+
+def test_cursor_rules_symlink_escape_is_not_discovered(tmp_path: Path) -> None:
+    root = _make_project(
+        tmp_path,
+        {"secret-notes.md": "internal\n", ".cursor/rules/real.md": "rule\n"},
+    )
+    (root / ".cursor" / "rules" / "leak.md").symlink_to(root / "secret-notes.md")
+    inv = discover(root)
+    ids = {i.id for i in inv.items}
+    assert "claude_md:.cursor/rules/real.md" in ids
+    assert "claude_md:.cursor/rules/leak.md" not in ids

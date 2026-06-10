@@ -177,6 +177,20 @@ describe("__internals", () => {
     ).toEqual([]);
   });
 
+  test("requirementsInstallCommands skips documentation under references/", () => {
+    expect(
+      __internals
+        .requirementsInstallCommands("alpha", [
+          "references/requirements.txt",
+          "references/setup/requirements.txt",
+          "tools/requirements.txt",
+        ])
+        .map((c) => c.command),
+    ).toEqual([
+      "uv add --project /home/sandbox --quiet -r '/skills/alpha/tools/requirements.txt'",
+    ]);
+  });
+
   test("resolveArtifactPath joins relative paths against defaultCwd", () => {
     expect(
       __internals.resolveArtifactPath({

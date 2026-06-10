@@ -249,6 +249,7 @@ describe("formatSkillActivation", () => {
   test("does not defang comparisons or whitespace-broken tag lookalikes", () => {
     const body =
       "if a < skill.level and b < skill_threshold: pass\n" +
+      "<skill-level> and <skill.file> and <skillz> are not our frames.\n" +
       "< /skill_content> stays literal — the platform never emits a space " +
       "inside a frame tag, so this is plain text to the model.";
     const result = formatSkillActivation({

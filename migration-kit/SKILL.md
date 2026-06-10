@@ -45,7 +45,10 @@ Ask for the source directory (default: the current working directory). Run:
 ```bash
 python3 "$SKILL_DIR/scripts/discover.py" <source_dir> --out inventory.json
 ```
-This emits a **secret-redacted** inventory (it never writes credentials to the file). Read
+This emits a **secret-redacted** inventory: credentials in structured config (MCP env, hook
+commands) are replaced with `<redacted>`; markdown bodies, frontmatter, and bundled files are kept
+verbatim but secret-scanned, with hits reported in `warnings` — review those before sharing the
+inventory. Read
 `inventory.json`. For items you'll map, skim the relevant bodies. Note anything in `unknowns` — that
 includes any frontmatter line the parser refused to interpret (it supports `key: value` scalars,
 inline `[a, b]` lists, and `- item` block lists; block scalars `|`/`>`, nested maps, anchors, and
