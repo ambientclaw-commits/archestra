@@ -47,7 +47,6 @@ from archestra_client import (
 )
 from contracts import (
     SECRET_KEY_RE,
-    SECRET_TOKEN_RE,
     ClaudeMdItem,
     CommandItem,
     ContractError,
@@ -66,6 +65,7 @@ from contracts import (
     optional_action,
     parse_inventory,
     parse_plan,
+    redact_tokens,
     require_answer,
     require_dict,
     require_list,
@@ -226,6 +226,9 @@ def _str_answers(value: object, *, ctx: str) -> list[str]:
     return out
 
 
+# when a plan carries both answers, precedence diverges by kind: _team_ids (multi-team
+# payloads: agent/skill/catalog) prefers teamIds; _team_id (single-team payloads:
+# install/llm_key) prefers teamId. each falls back to the other answer.
 def _team_ids(decision: Decision, *, ctx: str) -> list[str] | None:
     if decision.scope != "team":
         return None
@@ -353,12 +356,6 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             )
 
 
-def _scrub_secrets(text: str) -> str:
-    """mask credential-shaped tokens embedded in a string before it is printed (e.g. an MCP
-    launch command like ``npx server --token=sk-...``). belt-and-suspenders for dry-run output."""
-    return SECRET_TOKEN_RE.sub("<redacted>", text)
-
-
 # url credentials that aren't token-shaped: basic-auth userinfo and secret-named query params.
 _URL_USERINFO_RE = re.compile(r"(//)[^/@\s]+@")
 _URL_SECRET_QUERY_RE = re.compile(
@@ -370,7 +367,7 @@ def _scrub_url(url: str) -> str:
     params, plus any token-shaped value)."""
     url = _URL_USERINFO_RE.sub(r"\1<redacted>@", url)
     url = _URL_SECRET_QUERY_RE.sub(r"\1<redacted>", url)
-    return _scrub_secrets(url)
+    return redact_tokens(url)
 
 
 def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
@@ -395,8 +392,8 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
                 # (e.g. --token=sk-...) -- all on the typed dataclass, before serializing.
                 payload = replace(payload, localConfig=replace(
                     local,
-                    command=_scrub_secrets(local.command),
-                    arguments=[_scrub_secrets(a) for a in local.arguments],
+                    command=redact_tokens(local.command),
+                    arguments=[redact_tokens(a) for a in local.arguments],
                     # keep value-less vars value-less (don't fabricate a redacted value).
                     environment=[replace(e, value="<redacted>" if e.value is not None else None)
                                  for e in local.environment],
@@ -570,11 +567,11 @@ def main() -> int:
     built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
 
     if args.dry_run:
-        return _finish(_run_dry(built, verbose=args.verbose), args.out)
+        return _finish(_run_validation(built, verbose=args.verbose, label="dry-run"), args.out)
 
     if any(_invalid_build(b) for b in built):
         print("error: migration plan has invalid operations; no network changes were made", file=sys.stderr)
-        return _finish(_run_preflight(built, verbose=args.verbose), args.out)
+        return _finish(_run_validation(built, verbose=args.verbose, label="preflight"), args.out)
 
     base_url = os.environ.get("ARCHESTRA_BASE_URL")
     api_key = os.environ.get("ARCHESTRA_API_KEY")
@@ -583,14 +580,6 @@ def main() -> int:
         return 2
 
     return _finish(_run_apply(built, base_url, api_key), args.out)
-
-
-def _run_dry(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
-    return _run_validation(built, verbose=verbose, label="dry-run")
-
-
-def _run_preflight(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
-    return _run_validation(built, verbose=verbose, label="preflight")
 
 
 def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[ResultOp]:
