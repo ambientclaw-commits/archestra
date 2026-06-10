@@ -783,6 +783,8 @@ function requirementsInstallCommands(
 ): Array<{ command: string; cwd: string; timeoutSeconds: number }> {
   return (
     filePaths
+      // tolerate a leading "./" like deriveSkillFileKind does
+      .map((path) => path.replace(/^\.\//, ""))
       .filter(
         (path) =>
           path === REQUIREMENTS_FILE || path.endsWith(`/${REQUIREMENTS_FILE}`),

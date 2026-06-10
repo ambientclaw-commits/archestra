@@ -183,6 +183,7 @@ describe("__internals", () => {
         .requirementsInstallCommands("alpha", [
           "references/requirements.txt",
           "references/setup/requirements.txt",
+          "./references/requirements.txt",
           "tools/requirements.txt",
         ])
         .map((c) => c.command),
