@@ -108,10 +108,6 @@ export async function applySmartRouting(params: {
   return { chosenModel: decision.chosenModel, decision };
 }
 
-// ===========================================================================
-// Internal helpers
-// ===========================================================================
-
 /** Best-effort extraction of the latest user turn's text across provider shapes. */
 function extractLatestUserText(messages: unknown): string {
   if (!Array.isArray(messages)) {
