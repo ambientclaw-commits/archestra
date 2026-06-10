@@ -137,7 +137,7 @@ class SkillSandboxReplayEventModel {
    * Idempotent and race-safe: the insert uses
    * `ON CONFLICT (sandbox_id, skill_id) DO NOTHING`, so a concurrent or repeated
    * activation of the same skill is a no-op that returns `null` without
-   * appending a second mount (or its install command).
+   * appending a second mount (or its install commands).
    *
    * When the version ships `requirements.txt` files, `installCommands` are
    * appended as `command` events in the SAME transaction right after the mount

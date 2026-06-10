@@ -770,7 +770,9 @@ function validateSkillMountFilePath(skillName: string, path: string): void {
 /**
  * One install command per `requirements.txt` the version ships — root or
  * nested (skills commonly keep tool deps in `tools/requirements.txt`) — in
- * path-sorted order so the replay log is deterministic. We use `uv add` (not
+ * path-sorted order. The ordering is purely for replay-log determinism, not
+ * pin priority: each file is a separate `uv add -r`, so on conflicting pins
+ * the lexicographically last file wins. We use `uv add` (not
  * bare `uv pip install`) so the deps are recorded in pyproject/uv.lock —
  * otherwise a later model `uv add <pkg>` could prune them as extraneous on
  * sync. `--project` lets it run from any cwd.

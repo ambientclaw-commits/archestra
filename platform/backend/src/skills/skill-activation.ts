@@ -140,17 +140,26 @@ export function escapeXmlAttr(value: string): string {
  * verbatim. The only thing imported content must not do is open or close one
  * of the platform's own frames: those exact tag names are neutralized (the
  * `<` becomes `&lt;`) and everything else passes through untouched.
+ *
+ * Lossy on purpose: a body that legitimately contains the literal text
+ * `&lt;/skill_content>` becomes indistinguishable from a neutralized
+ * injection — both render defanged, so nothing can ever close the frame.
  */
 export function neutralizeFrameTags(value: string): string {
   return value.replace(FRAME_TAG_PATTERN, "&lt;");
 }
 
 /**
- * Every XML-ish frame tag the platform emits around model-facing skill text:
+ * Every XML-ish frame tag this pipeline emits around model-facing skill text:
  * the activation block (`skill_content`, `skill_resources`,
  * `skill_compatibility`, `skill_allowed_tools`), `read_skill_file` framing
  * (`skill_file`), and the catalog (`available_skills`, `skill`). Adding a new
  * frame anywhere in skill prompts requires registering its tag here.
+ *
+ * Deliberately scoped to the skill pipeline's own frames: tags other parts of
+ * the prompt assembly may use (tool-result or attachment framing, reminder
+ * blocks, …) pass through, exactly as they do in every other untrusted text
+ * surface (tool results, file contents read in the sandbox).
  */
 const FRAME_TAG_NAMES = [
   "skill_content",
@@ -162,10 +171,13 @@ const FRAME_TAG_NAMES = [
   "skill",
 ];
 
-// matches the `<` of an opening or closing frame tag, tolerating whitespace
-// and case games (`</ Skill_Content`); the lookahead keeps the tag name in
-// place so only the bracket is defanged.
+// matches the `<` of an opening or closing frame tag, case-insensitively. The
+// tag name must follow the bracket immediately — the platform never emits
+// whitespace inside a frame tag, and tolerating it would both over-defang
+// innocent text (`a < skill.level`) and, with quantifiers around the slash,
+// open a quadratic-backtracking hole on `<` + long whitespace runs. The
+// lookahead keeps the tag name in place so only the bracket is defanged.
 const FRAME_TAG_PATTERN = new RegExp(
-  `<(?=\\s*/?\\s*(?:${FRAME_TAG_NAMES.join("|")})\\b)`,
+  `<(?=/?(?:${FRAME_TAG_NAMES.join("|")})\\b)`,
   "gi",
 );
