@@ -942,6 +942,21 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOptimizationRule]: {
     optimizationRule: ["delete"],
   },
+  [RouteId.GetLlmRouters]: {
+    optimizationRule: ["read"],
+  },
+  [RouteId.GetLlmRouter]: {
+    optimizationRule: ["read"],
+  },
+  [RouteId.CreateLlmRouter]: {
+    optimizationRule: ["create"],
+  },
+  [RouteId.UpdateLlmRouter]: {
+    optimizationRule: ["update"],
+  },
+  [RouteId.DeleteLlmRouter]: {
+    optimizationRule: ["delete"],
+  },
   [RouteId.UpdateAppearanceSettings]: {
     organizationSettings: ["update"],
   },

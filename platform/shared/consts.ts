@@ -131,6 +131,14 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
+/**
+ * Header used to pass the llm_routers row ID from chat → LLM proxy so the proxy
+ * applies smart (cheap-vs-premium) routing for the request. Only honored on
+ * loopback requests, like CHAT_API_KEY_ID_HEADER, to prevent external clients
+ * from forcing arbitrary routers.
+ */
+export const LLM_ROUTER_ID_HEADER = "X-Archestra-Llm-Router-Id";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

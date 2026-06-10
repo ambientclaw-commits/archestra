@@ -12,6 +12,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmRouterModel from "@/models/llm-router";
 import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
@@ -311,6 +312,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/optimization-rules/:id": {
     resourceType: "optimizationRule",
     fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
+  },
+
+  // LLM Routers
+  "/api/llm-routers": {
+    resourceType: "optimizationRule",
+    fetchById: (id, orgId) => LlmRouterModel.findByIdForAudit(id, orgId),
+  },
+  "/api/llm-routers/:id": {
+    resourceType: "optimizationRule",
+    fetchById: (id, orgId) => LlmRouterModel.findByIdForAudit(id, orgId),
   },
 
   // Skills

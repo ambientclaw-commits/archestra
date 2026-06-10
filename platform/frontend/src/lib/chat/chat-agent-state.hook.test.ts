@@ -199,6 +199,7 @@ function makeConversation(
     organizationId: "org-1",
     agentId: "agent-a",
     chatApiKeyId: null,
+    llmRouterId: null,
     title: "Test",
     selectedModel: "gpt-4o",
     selectedProvider: "openai",

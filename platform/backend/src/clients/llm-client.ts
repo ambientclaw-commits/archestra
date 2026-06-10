@@ -12,6 +12,7 @@ import type { InteractionSource } from "@archestra/shared";
 import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  LLM_ROUTER_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
@@ -120,6 +121,7 @@ export function createLLMModel(params: {
   baseUrl: string | null;
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
+  llmRouterId?: string | null;
 }): LLMModel {
   const {
     provider,
@@ -133,6 +135,7 @@ export function createLLMModel(params: {
     baseUrl,
     contextIsTrusted,
     chatApiKeyId,
+    llmRouterId,
   } = params;
 
   // Build headers for LLM Proxy
@@ -168,6 +171,11 @@ export function createLLMModel(params: {
       { chatApiKeyId, provider },
       `[${provider}Proxy] chat attaching provider-api-key-id header`,
     );
+  }
+  // Tells the proxy to apply smart (cheap-vs-premium) routing for this request.
+  // Loopback-gated on the proxy side; see LLM_ROUTER_ID_HEADER.
+  if (llmRouterId) {
+    clientHeaders[LLM_ROUTER_ID_HEADER] = llmRouterId;
   }
 
   const headers =
@@ -205,6 +213,7 @@ export async function createLLMModelForAgent(params: {
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
   contextIsTrusted?: boolean;
+  llmRouterId?: string | null;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -222,6 +231,7 @@ export async function createLLMModelForAgent(params: {
     source,
     agentLlmApiKeyId,
     contextIsTrusted,
+    llmRouterId,
   } = params;
 
   const {
@@ -287,6 +297,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     contextIsTrusted,
     chatApiKeyId,
+    llmRouterId,
   });
 
   return { model, provider, apiKeySource };

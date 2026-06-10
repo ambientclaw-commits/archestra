@@ -548,6 +548,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               sessionId: conversationId,
               source: "chat",
               agentLlmApiKeyId: agent.llmApiKeyId,
+              llmRouterId: conversation.llmRouterId,
             });
 
             // When a user invoked a skill via slash command, inject its content

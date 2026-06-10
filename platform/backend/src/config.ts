@@ -1211,6 +1211,8 @@ const config = {
     virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
+    smartRouterEnabled:
+      process.env.ARCHESTRA_LLM_SMART_ROUTER_ENABLED !== "false",
   },
   kb: {
     hybridSearchEnabled:

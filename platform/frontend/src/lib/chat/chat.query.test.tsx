@@ -123,6 +123,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     organizationId: "org-1",
     agentId: "agent-a",
     chatApiKeyId: "key-openai",
+    llmRouterId: null,
     title: "Test",
     selectedModel: "gpt-4o",
     selectedProvider: "openai",

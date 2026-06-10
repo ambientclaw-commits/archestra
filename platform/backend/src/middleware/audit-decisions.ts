@@ -12,6 +12,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import LlmRouterModel from "@/models/llm-router";
 import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
@@ -94,6 +95,7 @@ export const AUDIT_DECISIONS = {
   },
   limitsTable: { audited: true, model: LimitModel },
   llmProviderApiKeysTable: { audited: true, model: LlmProviderApiKeyModel },
+  llmRoutersTable: { audited: true, model: LlmRouterModel },
   mcpServersTable: { audited: true, model: McpServerModel },
   mcpServerInstallationRequestsTable: {
     audited: true,

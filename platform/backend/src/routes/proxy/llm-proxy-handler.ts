@@ -547,35 +547,55 @@ export async function handleLLMProxy<
       }
     }
 
-    // Cost optimization - potentially switch to cheaper model
+    // Cost optimization - potentially switch to cheaper model.
+    // The smart router (in-app chat, loopback only) takes precedence over
+    // static optimization rules; both record the swap as baseline → actual so
+    // the existing cost/savings path captures it.
     const baselineModel = requestAdapter.getModel();
     const hasTools = requestAdapter.hasTools();
     const tools = requestAdapter.getTools();
-    // Cast messages since getOptimizedModel expects specific provider types
-    // but our generic adapter provides the correct type at runtime
-    const optimizedModel = await utils.costOptimization.getOptimizedModel(
-      resolvedAgent,
-      requestAdapter.getProviderMessages() as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[1],
-      providerName as Parameters<
-        typeof utils.costOptimization.getOptimizedModel
-      >[2],
-      hasTools,
-      tools,
-    );
 
-    if (optimizedModel) {
-      requestAdapter.setModel(optimizedModel);
-      logger.info(
-        { resolvedAgentId, optimizedModel },
-        "Optimized model selected",
-      );
+    const smartRoute = await utils.smartRouter.applySmartRouting({
+      request,
+      organizationId: resolvedAgent.organizationId,
+      agentId: resolvedAgentId,
+      userId,
+      sessionId,
+      providerMessages: requestAdapter.getProviderMessages(),
+      hasTools,
+    });
+
+    if (smartRoute) {
+      if (smartRoute.chosenModel !== baselineModel) {
+        requestAdapter.setModel(smartRoute.chosenModel);
+      }
     } else {
-      logger.info(
-        { resolvedAgentId, baselineModel },
-        "No matching optimized model found, proceeding with baseline model",
+      // Cast messages since getOptimizedModel expects specific provider types
+      // but our generic adapter provides the correct type at runtime
+      const optimizedModel = await utils.costOptimization.getOptimizedModel(
+        resolvedAgent,
+        requestAdapter.getProviderMessages() as Parameters<
+          typeof utils.costOptimization.getOptimizedModel
+        >[1],
+        providerName as Parameters<
+          typeof utils.costOptimization.getOptimizedModel
+        >[2],
+        hasTools,
+        tools,
       );
+
+      if (optimizedModel) {
+        requestAdapter.setModel(optimizedModel);
+        logger.info(
+          { resolvedAgentId, optimizedModel },
+          "Optimized model selected",
+        );
+      } else {
+        logger.info(
+          { resolvedAgentId, baselineModel },
+          "No matching optimized model found, proceeding with baseline model",
+        );
+      }
     }
 
     const actualModel = requestAdapter.getModel();

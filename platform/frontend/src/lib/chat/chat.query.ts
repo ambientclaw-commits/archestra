@@ -199,6 +199,7 @@ export function useUpdateConversation() {
       title,
       modelId,
       chatApiKeyId,
+      llmRouterId,
       agentId,
       pinnedAt,
     }: { id: string } & NonNullable<
@@ -210,6 +211,7 @@ export function useUpdateConversation() {
           title,
           modelId,
           chatApiKeyId,
+          llmRouterId,
           agentId,
           pinnedAt,
         },

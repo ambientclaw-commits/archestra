@@ -25,6 +25,7 @@ export { default as limitsRoutes } from "./limits";
 export { default as llmOauthClientsRoutes } from "./llm-oauth-clients";
 export { default as llmProviderApiKeyRoutes } from "./llm-provider-api-keys";
 export { default as llmModelsRoutes } from "./llm-provider-models";
+export { default as llmRouterRoutes } from "./llm-router/llm-router.routes";
 export { default as mcpGatewayRoutes } from "./mcp-gateway";
 export { default as mcpProxyRoutes } from "./mcp-proxy";
 export { default as mcpServerRoutes } from "./mcp-server";

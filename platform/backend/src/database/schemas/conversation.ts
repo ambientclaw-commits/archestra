@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
+import llmRoutersTable from "./llm-router";
 import modelsTable from "./model";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
@@ -35,6 +36,13 @@ const conversationsTable = pgTable("conversations", {
   selectedProvider: text("selected_provider").$type<SupportedProvider>(),
   /** FK to models(id) — the resolved model for this conversation. */
   modelId: uuid("model_id").references(() => modelsTable.id, {
+    onDelete: "set null",
+  }),
+  /**
+   * FK to llm_routers(id). When set, the smart router picks the concrete model
+   * per message instead of using `modelId` directly. ON DELETE SET NULL.
+   */
+  llmRouterId: uuid("llm_router_id").references(() => llmRoutersTable.id, {
     onDelete: "set null",
   }),
   hasCustomToolSelection: boolean("has_custom_tool_selection")

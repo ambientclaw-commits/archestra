@@ -42,6 +42,7 @@ export {
   default as LlmProviderApiKeyModelLinkModel,
   selectionKey,
 } from "./llm-provider-api-key-model";
+export { default as LlmRouterModel } from "./llm-router";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpServerModel } from "./mcp-server";

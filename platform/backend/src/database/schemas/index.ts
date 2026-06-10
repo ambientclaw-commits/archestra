@@ -94,6 +94,7 @@ export { default as limitsTable } from "./limit";
 export { default as limitModelUsageTable } from "./limit-model-usage";
 export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
+export { default as llmRoutersTable } from "./llm-router";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";

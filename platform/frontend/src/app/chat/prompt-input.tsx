@@ -30,6 +30,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { SmartRouterSelector } from "@/components/chat/smart-router-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -74,6 +75,8 @@ export interface ArchestraPromptInputProps
   onCompactConversation?: () => Promise<void> | void;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /** The conversation's currently selected smart router, if any. */
+  currentLlmRouterId?: string | null;
 }
 
 type SlashCommand = {
@@ -120,6 +123,7 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  currentLlmRouterId,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -610,6 +614,10 @@ const PromptInputContent = ({
             textareaRef={textareaRef}
           />
           <div className="flex items-center gap-2">
+            <SmartRouterSelector
+              conversationId={conversationId}
+              currentLlmRouterId={currentLlmRouterId}
+            />
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
@@ -660,6 +668,7 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   onResetModelOverride,
+  currentLlmRouterId,
 }: ArchestraPromptInputProps) => {
   const handleProviderFileError = useCallback(
     (err: {
@@ -712,6 +721,7 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          currentLlmRouterId={currentLlmRouterId}
         />
       </PromptInputProvider>
     </div>

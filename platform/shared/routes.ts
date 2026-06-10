@@ -443,6 +443,13 @@ export const RouteId = {
   UpdateOptimizationRule: "updateOptimizationRule",
   DeleteOptimizationRule: "deleteOptimizationRule",
 
+  // LLM Router Routes
+  GetLlmRouters: "getLlmRouters",
+  GetLlmRouter: "getLlmRouter",
+  CreateLlmRouter: "createLlmRouter",
+  UpdateLlmRouter: "updateLlmRouter",
+  DeleteLlmRouter: "deleteLlmRouter",
+
   // Secrets Routes
   GetSecretsType: "getSecretsType",
   GetSecret: "getSecret",

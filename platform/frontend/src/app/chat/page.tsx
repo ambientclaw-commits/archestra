@@ -2292,6 +2292,7 @@ export function ChatPageContent({
                           currentConversationChatApiKeyId={
                             conversation?.chatApiKeyId
                           }
+                          currentLlmRouterId={conversation?.llmRouterId}
                           currentProvider={currentProvider}
                           textareaRef={textareaRef}
                           onProviderChange={handleProviderChange}

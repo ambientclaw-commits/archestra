@@ -77,6 +77,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
+              smartRouterEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -121,6 +122,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           agentHooksEnabled: config.hooks.enabled,
+          smartRouterEnabled: config.llmProxy.smartRouterEnabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

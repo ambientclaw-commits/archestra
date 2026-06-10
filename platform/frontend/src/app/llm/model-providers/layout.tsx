@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { useFeature } from "@/lib/config/config.query";
 
 const TABS = [
   {
@@ -15,6 +16,11 @@ const TABS = [
   },
 ];
 
+const SMART_ROUTER_TAB = {
+  label: "Smart Router",
+  href: "/llm/model-providers/smart-router",
+};
+
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/llm/model-providers/api-keys": {
     title: "API Keys",
@@ -25,6 +31,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Models",
     description:
       'Models available from your configured API keys. Use "Refresh Models" to re-fetch models and capabilities from providers.',
+  },
+  "/llm/model-providers/smart-router": {
+    title: "Smart Router",
+    description:
+      "Route each request between an everyday and a premium model by difficulty, with a Cost / Balanced / Quality mode.",
   },
 };
 
@@ -47,6 +58,8 @@ export default function ModelProvidersLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const smartRouterEnabled = useFeature("smartRouterEnabled");
+  const tabs = smartRouterEnabled ? [...TABS, SMART_ROUTER_TAB] : TABS;
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
   const config = PAGE_CONFIG[pathname] ?? {
@@ -61,7 +74,7 @@ export default function ModelProvidersLayout({
       <PageLayout
         title={config.title}
         description={config.description}
-        tabs={TABS}
+        tabs={tabs}
         actionButton={actionButton}
       >
         {children}

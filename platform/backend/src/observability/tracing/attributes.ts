@@ -85,6 +85,13 @@ export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
 export const ATTR_ARCHESTRA_LABEL_PREFIX = "archestra.label.";
+export const ATTR_ARCHESTRA_ROUTER_ID = "archestra.router.id";
+export const ATTR_ARCHESTRA_ROUTER_TIER = "archestra.router.tier";
+export const ATTR_ARCHESTRA_ROUTER_SOURCE = "archestra.router.source";
+export const ATTR_ARCHESTRA_ROUTER_SCORE = "archestra.router.score";
+export const ATTR_ARCHESTRA_ROUTER_REASON = "archestra.router.reason";
+export const ATTR_ARCHESTRA_ROUTER_BASELINE_MODEL =
+  "archestra.router.baseline_model";
 
 // --- MCP custom ---
 export const ATTR_MCP_SERVER_NAME = "mcp.server.name";
