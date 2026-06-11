@@ -93,5 +93,11 @@ describe("access-control", () => {
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
       expect(required?.sandbox).toContain("execute");
     });
+
+    test("getSkillSandboxConversationFile requires sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.GetSkillSandboxConversationFile];
+      expect(required?.sandbox).toContain("execute");
+    });
   });
 });
