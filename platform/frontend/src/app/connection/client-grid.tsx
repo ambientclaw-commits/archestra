@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 
-const CLIENT_PICKER_PAGE_SIZE = 8;
+const CLIENT_PICKER_PAGE_SIZE = 12;
 
 interface ClientPickerProps {
   clients: ConnectClient[];

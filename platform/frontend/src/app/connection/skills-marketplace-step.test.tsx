@@ -120,16 +120,16 @@ describe("SkillsMarketplaceStep", () => {
     });
   });
 
-  it("returns null for non-admin users", () => {
+  it("shows an admin-required message for non-admin users", () => {
     hasPermissionsMock.mockReturnValue({ data: false });
     listLinksMock.mockReturnValue({
       data: { links: [] },
       isPending: false,
     });
-    const { container } = render(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
-    expect(container.textContent).toBe("");
+    render(<SkillsMarketplaceStep client={anyClient} />);
+    expect(
+      screen.getByText(/Ask an admin to set up skill sharing/i),
+    ).toBeInTheDocument();
   });
 
   it("renders the create panel when no active link exists", async () => {
@@ -137,9 +137,7 @@ describe("SkillsMarketplaceStep", () => {
       data: { links: [] },
       isPending: false,
     });
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
     await waitFor(() =>
       expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
     );
@@ -153,9 +151,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
@@ -176,9 +172,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -207,20 +201,22 @@ describe("SkillsMarketplaceStep", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders nothing when the picked client doesn't support skill marketplaces", () => {
+  it("falls back to the generic clone-path guide for clients without a dedicated snippet", async () => {
     listLinksMock.mockReturnValue({
       data: { links: [] },
       isPending: false,
     });
+    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
     const unsupportedClient = findClient("n8n");
-    const { container } = render(
-      <SkillsMarketplaceStep
-        client={unsupportedClient}
-        expanded
-        onToggle={() => {}}
-      />,
+    renderWithClient(<SkillsMarketplaceStep client={unsupportedClient} />);
+    await userEvent.click(
+      await screen.findByTestId("skills-marketplace-create"),
     );
-    expect(container.textContent).toBe("");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("skills-marketplace-snippets-generic"),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("filters snippets to the chosen client", async () => {
@@ -230,13 +226,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep
-        client={claudeClient}
-        expanded
-        onToggle={() => {}}
-      />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -259,13 +249,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep
-        client={copilotClient}
-        expanded
-        onToggle={() => {}}
-      />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={copilotClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -302,9 +286,7 @@ describe("SkillsMarketplaceStep", () => {
       revokeError: undefined,
     });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     // panel mounts in hidden-URL state — no install snippets and no implicit rotation
     expect(
@@ -327,9 +309,7 @@ describe("SkillsMarketplaceStep", () => {
       revokeError: undefined,
     });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
@@ -357,9 +337,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     revokeLinkMock.mockResolvedValue({ success: true });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: /^Revoke$/i }),

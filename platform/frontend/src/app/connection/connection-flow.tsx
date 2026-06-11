@@ -20,11 +20,10 @@ import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { SearchableSelect } from "./searchable-select";
+import { SectionHeading } from "./section-heading";
 import { SkillsMarketplaceStep } from "./skills-marketplace-step";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
-
-type OpenKey = "client" | "mcp" | "proxy" | "skills";
 
 interface ConnectionFlowProps {
   defaultMcpGatewayId?: string;
@@ -45,7 +44,7 @@ export function ConnectionFlow({
   defaultLlmProxyId,
   adminDefaultMcpGatewayId,
   adminDefaultLlmProxyId,
-  adminDefaultClientId,
+  adminDefaultClientId: _adminDefaultClientId,
   shownClientIds,
   shownProviders,
   connectionBaseUrls,
@@ -84,55 +83,22 @@ export function ConnectionFlow({
     return CONNECT_CLIENTS.filter((c) => c.id === "generic" || shown.has(c.id));
   }, [shownClientIds]);
 
-  // Pre-select a client so the flow never loads blank. URL param wins (for
-  // bookmarkable state), then the admin default, then "Any Client" as the
-  // system fallback.
+  // Only honor the URL param on first load. The picker intentionally starts
+  // empty so users explicitly choose their client; the admin default still
+  // affects the URL-based deep-link path via resolveInitialClientId callers
+  // elsewhere, but it does not auto-pick a tile here.
   const initialClientId = resolveInitialClientId({
     urlClientId,
-    adminDefaultClientId,
+    adminDefaultClientId: null,
     visibleClientIds: visibleClients.map((c) => c.id),
   });
   const [clientId, setClientId] = useState<string | null>(initialClientId);
   const client = visibleClients.find((c) => c.id === clientId) ?? null;
 
-  const [openSteps, setOpenSteps] = useState<Set<OpenKey>>(() => {
-    const initial = new Set<OpenKey>(["client"]);
-    if (initialClientId) {
-      // Mirror selectClient's auto-open logic for bookmarked URLs.
-      if (fromTable && urlGatewayId && !urlProxyId) initial.add("mcp");
-      else if (fromTable && urlProxyId && !urlGatewayId) initial.add("proxy");
-      else {
-        initial.add("mcp");
-        initial.add("proxy");
-        initial.add("skills");
-      }
-    }
-    return initial;
-  });
-  const isOpen = (k: OpenKey) => openSteps.has(k);
-  const toggleOne = (k: OpenKey) =>
-    setOpenSteps((s) => {
-      const n = new Set(s);
-      if (n.has(k)) n.delete(k);
-      else n.add(k);
-      return n;
-    });
-
   const selectClient = (id: string | null) => {
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
     updateUrlParams({ clientId: id, providerId: null });
-    if (!id) return;
-    // When the user arrived from the MCP Gateway / LLM Proxy table
-    // (from=table + only one pinned id), auto-open just that side.
-    // Otherwise expand both steps so the full flow is visible.
-    const toOpen: OpenKey[] =
-      fromTable && urlGatewayId && !urlProxyId
-        ? ["mcp"]
-        : fromTable && urlProxyId && !urlGatewayId
-          ? ["proxy"]
-          : ["mcp", "proxy", "skills"];
-    setOpenSteps((s) => new Set<OpenKey>([...s, ...toOpen]));
   };
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
@@ -197,17 +163,7 @@ export function ConnectionFlow({
   });
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
-
-  const mcpState: StepState = !clientId
-    ? "todo"
-    : isOpen("mcp")
-      ? "active"
-      : "todo";
-  const proxyState: StepState = !clientId
-    ? "todo"
-    : isOpen("proxy")
-      ? "active"
-      : "todo";
+  const stepState: StepState = clientId ? "active" : "todo";
 
   return (
     <div className="grid gap-3.5">
@@ -228,111 +184,122 @@ export function ConnectionFlow({
       />
 
       {/* Step 2 — MCP Gateway */}
-      {canReadMcpGateway && (
-        <StepCard
-          hideStatus
-          title="Connect the MCP Gateway to access tools"
-          state={mcpState}
-          expanded={isOpen("mcp") && !!client}
-          onToggle={client ? () => toggleOne("mcp") : undefined}
-          actions={
-            client &&
-            isOpen("mcp") &&
-            client.mcp.kind !== "unsupported" &&
-            (mcpGateways?.length ?? 0) > 1 ? (
-              <SearchableSelect
-                options={(mcpGateways ?? []).map((g) => ({
-                  value: g.id,
-                  label: g.name,
-                }))}
-                value={effectiveMcpId}
-                onValueChange={handleMcpSelect}
-                placeholder="Select gateway"
-              />
-            ) : null
-          }
+      {client && canReadMcpGateway && (
+        <div
+          key={`mcp-${client.id}`}
+          className="grid gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-500 [animation-delay:0ms] [animation-fill-mode:backwards]"
         >
-          {client && selectedMcp && effectiveMcpId && (
-            <McpClientInstructions
-              client={client}
-              gatewayId={effectiveMcpId}
-              gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
-              gatewayName={selectedMcp.name}
-              baseUrl={baseUrl}
-            />
-          )}
-          {client && !effectiveMcpId && (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              No MCP gateways available.{" "}
-              <Link
-                href="/mcp/gateways"
-                className="underline hover:text-foreground"
-              >
-                Create one
-              </Link>{" "}
-              to continue.
-            </div>
-          )}
-        </StepCard>
+          <SectionHeading step={1} title="Connect the MCP Gateway" />
+          <StepCard
+            hideStatus
+            pinned
+            state={stepState}
+            expanded
+            actions={
+              client &&
+              client.mcp.kind !== "unsupported" &&
+              (mcpGateways?.length ?? 0) > 1 ? (
+                <SearchableSelect
+                  options={(mcpGateways ?? []).map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                  }))}
+                  value={effectiveMcpId}
+                  onValueChange={handleMcpSelect}
+                  placeholder="Select gateway"
+                />
+              ) : null
+            }
+          >
+            {client && selectedMcp && effectiveMcpId && (
+              <McpClientInstructions
+                client={client}
+                gatewayId={effectiveMcpId}
+                gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
+                gatewayName={selectedMcp.name}
+                baseUrl={baseUrl}
+              />
+            )}
+            {client && !effectiveMcpId && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                No MCP gateways available.{" "}
+                <Link
+                  href="/mcp/gateways"
+                  className="underline hover:text-foreground"
+                >
+                  Create one
+                </Link>{" "}
+                to continue.
+              </div>
+            )}
+          </StepCard>
+        </div>
       )}
 
       {/* Step 3 — LLM Proxy */}
-      {canReadLlmProxy && (
-        <StepCard
-          hideStatus
-          title="Route through the LLM Proxy to make it secure"
-          state={proxyState}
-          expanded={isOpen("proxy") && !!client}
-          onToggle={client ? () => toggleOne("proxy") : undefined}
-          actions={
-            client &&
-            isOpen("proxy") &&
-            client.proxy.kind !== "unsupported" &&
-            (llmProxies?.length ?? 0) > 1 ? (
-              <SearchableSelect
-                options={(llmProxies ?? []).map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                }))}
-                value={effectiveProxyId}
-                onValueChange={handleProxySelect}
-                placeholder="Select proxy"
-              />
-            ) : null
-          }
+      {client && canReadLlmProxy && (
+        <div
+          key={`proxy-${client.id}`}
+          className="grid gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-500 [animation-delay:140ms] [animation-fill-mode:backwards]"
         >
-          {client && effectiveProxyId && (
-            <ProxyClientInstructions
-              client={client}
-              profileId={effectiveProxyId}
-              profileName={
-                llmProxies?.find((p) => p.id === effectiveProxyId)?.name ?? ""
-              }
-              shownProviders={shownProviders}
-              baseUrl={baseUrl}
-            />
-          )}
-          {client && !effectiveProxyId && (
-            <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              No LLM proxies available.{" "}
-              <Link
-                href="/llm/proxies"
-                className="underline hover:text-foreground"
-              >
-                Create one
-              </Link>{" "}
-              to continue.
-            </div>
-          )}
-        </StepCard>
+          <SectionHeading step={2} title="Route through the LLM Proxy" />
+          <StepCard
+            hideStatus
+            pinned
+            state={stepState}
+            expanded
+            actions={
+              client &&
+              client.proxy.kind !== "unsupported" &&
+              (llmProxies?.length ?? 0) > 1 ? (
+                <SearchableSelect
+                  options={(llmProxies ?? []).map((p) => ({
+                    value: p.id,
+                    label: p.name,
+                  }))}
+                  value={effectiveProxyId}
+                  onValueChange={handleProxySelect}
+                  placeholder="Select proxy"
+                />
+              ) : null
+            }
+          >
+            {client && effectiveProxyId && (
+              <ProxyClientInstructions
+                client={client}
+                profileId={effectiveProxyId}
+                profileName={
+                  llmProxies?.find((p) => p.id === effectiveProxyId)?.name ?? ""
+                }
+                shownProviders={shownProviders}
+                baseUrl={baseUrl}
+              />
+            )}
+            {client && !effectiveProxyId && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                No LLM proxies available.{" "}
+                <Link
+                  href="/llm/proxies"
+                  className="underline hover:text-foreground"
+                >
+                  Create one
+                </Link>{" "}
+                to continue.
+              </div>
+            )}
+          </StepCard>
+        </div>
       )}
 
       {/* Step 4 — Skills marketplace (no-ops when feature off or non-admin) */}
-      <SkillsMarketplaceStep
-        client={client}
-        expanded={isOpen("skills")}
-        onToggle={client ? () => toggleOne("skills") : undefined}
-      />
+      {client && (
+        <div
+          key={`skills-${client.id}`}
+          className="grid gap-3.5 animate-in fade-in slide-in-from-bottom-2 duration-500 [animation-delay:280ms] [animation-fill-mode:backwards]"
+        >
+          <SkillsMarketplaceStep client={client} />
+        </div>
+      )}
     </div>
   );
 }

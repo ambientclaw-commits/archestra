@@ -74,7 +74,7 @@ function StatusChip({ state }: { state: StepState }) {
 
 interface StepCardProps {
   number?: number;
-  title: ReactNode;
+  title?: ReactNode;
   subtitle?: ReactNode;
   state: StepState;
   expanded: boolean;
@@ -105,6 +105,8 @@ export function StepCard({
 }: StepCardProps) {
   const dimmed = !onToggle && !pinned;
   const showChevron = !!onToggle;
+  const hasTitleContent = !!title || !!subtitle || !hideStatus;
+  const hasHeader = hasTitleContent || !!actions || showChevron;
 
   return (
     <section
@@ -114,56 +116,84 @@ export function StepCard({
         dimmed && "opacity-55",
       )}
     >
-      <div className="flex select-none flex-wrap items-center gap-3 px-5 py-4 sm:gap-3.5">
-        <button
-          type="button"
-          disabled={!onToggle}
-          onClick={onToggle}
+      {hasHeader && (
+        <div
           className={cn(
-            "flex min-w-0 flex-1 basis-full items-center gap-3.5 bg-transparent text-left outline-none sm:basis-0",
-            onToggle && "cursor-pointer focus-visible:opacity-80",
+            "flex select-none flex-wrap items-center gap-3 px-5 sm:gap-3.5",
+            hasTitleContent ? "py-4" : "py-2",
           )}
-          aria-expanded={expanded}
         >
-          {!hideStatus && <StepNumber n={number} state={state} />}
+          {hasTitleContent && (
+            <button
+              type="button"
+              disabled={!onToggle}
+              onClick={onToggle}
+              className={cn(
+                "flex min-w-0 flex-1 basis-full items-center gap-3.5 bg-transparent text-left outline-none sm:basis-0",
+                onToggle && "cursor-pointer focus-visible:opacity-80",
+              )}
+              aria-expanded={expanded}
+            >
+              {!hideStatus && <StepNumber n={number} state={state} />}
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-[17px] font-bold tracking-tight text-foreground">
-                {title}
-              </h3>
-              {!hideStatus && <StatusChip state={state} />}
-            </div>
-            {subtitle && (
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                {subtitle}
+              <div className="min-w-0 flex-1">
+                {(title || !hideStatus) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {title && (
+                      <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+                        {title}
+                      </h3>
+                    )}
+                    {!hideStatus && <StatusChip state={state} />}
+                  </div>
+                )}
+                {subtitle && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {subtitle}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </button>
+            </button>
+          )}
 
-        {actions && (
-          <div className="ml-[42px] flex shrink-0 flex-wrap items-center gap-2 sm:ml-0">
-            {actions}
-          </div>
-        )}
+          {actions && (
+            <div
+              className={cn(
+                "flex shrink-0 flex-wrap items-center gap-2",
+                hasTitleContent ? "ml-[42px] sm:ml-0" : "ml-auto",
+              )}
+            >
+              {actions}
+            </div>
+          )}
 
-        {showChevron && (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-label={expanded ? "Collapse step" : "Expand step"}
-            className={cn(
-              "ml-auto flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-transform hover:bg-muted sm:ml-1",
-              expanded && "rotate-180",
-            )}
-          >
-            <ChevronDown className="size-3.5" strokeWidth={2.2} />
-          </button>
-        )}
-      </div>
+          {showChevron && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label={expanded ? "Collapse step" : "Expand step"}
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-transform hover:bg-muted",
+                hasTitleContent ? "ml-auto sm:ml-1" : "ml-1",
+                expanded && "rotate-180",
+              )}
+            >
+              <ChevronDown className="size-3.5" strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+      )}
 
-      {expanded && <div className="border-t px-5 pb-5 pt-4">{children}</div>}
+      {expanded && (
+        <div
+          className={cn(
+            "px-5 pb-5",
+            hasTitleContent ? "border-t pt-4" : "pt-4",
+          )}
+        >
+          {children}
+        </div>
+      )}
     </section>
   );
 }

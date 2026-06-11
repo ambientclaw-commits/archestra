@@ -30,19 +30,18 @@ import {
 } from "@/lib/skills/skill-share.query";
 import { handleApiError } from "@/lib/utils";
 import type { ConnectClient } from "./clients";
+import { SectionHeading } from "./section-heading";
 import {
   computeSkillMarketplaceExpiresAt,
   SKILL_MARKETPLACE_CLIENTS,
   SKILL_MARKETPLACE_TTL_PRESETS,
   type SkillMarketplaceClient,
 } from "./skills-marketplace-clients";
-import { StepCard, type StepState } from "./step-card";
+import { StepCard } from "./step-card";
 import { TerminalBlock } from "./terminal-block";
 
 interface SkillsMarketplaceStepProps {
   client: ConnectClient | null;
-  expanded: boolean;
-  onToggle: (() => void) | undefined;
 }
 
 /**
@@ -55,33 +54,25 @@ interface RevealedClone {
   marketplaceName: string;
 }
 
-export function SkillsMarketplaceStep({
-  client,
-  expanded,
-  onToggle,
-}: SkillsMarketplaceStepProps) {
+export function SkillsMarketplaceStep({ client }: SkillsMarketplaceStepProps) {
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
 
-  if (!skillsEnabled || !canAdmin) return null;
-
-  // hide the step entirely when the picked client doesn't support installable
-  // skill marketplaces — the user already knows their tool doesn't support it,
-  // we don't need to apologize in the UI.
-  if (client && !isClientSupported(client)) return null;
-
-  const state: StepState = !client ? "todo" : expanded ? "active" : "todo";
+  if (!skillsEnabled || !client) return null;
 
   return (
-    <StepCard
-      hideStatus
-      title="Install shared skills"
-      state={state}
-      expanded={expanded && !!client}
-      onToggle={client ? onToggle : undefined}
-    >
-      {client && <SkillsMarketplaceBody client={client} />}
-    </StepCard>
+    <>
+      <SectionHeading step={3} title="Install shared skills" />
+      <StepCard hideStatus pinned state="active" expanded>
+        {!canAdmin ? (
+          <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+            Ask an admin to set up skill sharing for your org.
+          </div>
+        ) : (
+          <SkillsMarketplaceBody client={client} />
+        )}
+      </StepCard>
+    </>
   );
 }
 
@@ -483,17 +474,6 @@ function SecurityNote() {
         local git config after they run the marketplace add command.
       </p>
     </div>
-  );
-}
-
-function isClientSupported(client: ConnectClient | null): boolean {
-  if (!client) return false;
-  return (
-    client.id === "claude-code" ||
-    client.id === "codex" ||
-    client.id === "copilot-cli" ||
-    client.id === "cursor" ||
-    client.id === "generic"
   );
 }
 

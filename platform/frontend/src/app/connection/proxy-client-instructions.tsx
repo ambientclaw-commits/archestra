@@ -9,7 +9,6 @@ import { AlertTriangle, Check, Copy, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
@@ -399,12 +398,18 @@ function StepList({ steps }: { steps: ProxyStep[] }) {
             {s.fields && s.fields.length > 0 && (
               <div className="grid gap-2">
                 {s.fields.map((f) => (
-                  <FieldRow
-                    key={f.label}
-                    label={f.label}
-                    value={f.value}
-                    copyable={f.copyable ?? true}
-                  />
+                  <div key={f.label} className="grid gap-1">
+                    <FieldRow
+                      label={f.label}
+                      value={f.value}
+                      copyable={f.copyable ?? true}
+                    />
+                    {f.hint && (
+                      <div className="pl-1 text-[12px] leading-snug text-muted-foreground">
+                        {f.hint}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -497,29 +502,14 @@ function ProviderGrid({
   selected,
   onSelect,
 }: ProviderGridProps) {
-  const PRIMARY: SupportedProvider[] = [
-    "openai",
-    "anthropic",
-    "gemini",
-    "bedrock",
-    "groq",
-  ];
-  const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
-  const compact = providers.filter((p) => PRIMARY.includes(p));
-  // If the admin's allow-list excludes every primary provider, there's
-  // nothing to collapse to — fall through to the full list instead of
-  // rendering an empty grid behind a "Show all" button.
-  const canCollapse = compact.length > 0 && compact.length < providers.length;
   const normalizedQuery = query.trim().toLowerCase();
   const searching = normalizedQuery.length > 0;
-  // When searching, ignore the compact/expanded toggle and search all providers.
-  const base = searching || showAll || !canCollapse ? providers : compact;
   const visible = searching
-    ? base.filter((p) =>
+    ? providers.filter((p) =>
         providerDisplayNames[p].toLowerCase().includes(normalizedQuery),
       )
-    : base;
+    : providers;
 
   return (
     <div>
@@ -527,29 +517,16 @@ function ProviderGrid({
         <h3 className="text-[17px] font-bold tracking-tight text-foreground">
           Select a provider
         </h3>
-        {canCollapse && (
-          <div className="flex items-center gap-3">
-            {!searching && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 text-xs"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll ? "Show fewer" : `Show all (${providers.length})`}
-              </Button>
-            )}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                className="h-9 w-56 rounded-full pl-8"
-              />
-            </div>
+        {providers.length > 6 && (
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search"
+              className="h-9 w-56 rounded-full pl-8"
+            />
           </div>
         )}
       </div>
