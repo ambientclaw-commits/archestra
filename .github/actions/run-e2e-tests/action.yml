@@ -8,7 +8,7 @@ inputs:
     description: "Playwright project(s) to run (e.g., 'chromium', 'api', 'chromium --project=identity-providers')"
     required: true
   shard:
-    description: "Shard configuration (e.g., '--shard=1/3')"
+    description: "Shard configuration (e.g., '--shard=1/2')"
     required: false
     default: ""
   extra_args:

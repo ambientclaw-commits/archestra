@@ -20,7 +20,10 @@ on:
 permissions: {}
 
 concurrency:
-  group: "platform-e2e-tests-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  # The event name keeps trigger types in separate groups: without it, a
+  # manual workflow_dispatch on main near 03:00 UTC would share a group with
+  # (and cancel) the nightly scheduled run.
+  group: "platform-e2e-tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
   cancel-in-progress: true
 
 env:

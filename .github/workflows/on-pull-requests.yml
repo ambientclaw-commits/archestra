@@ -400,6 +400,11 @@ jobs:
   # Image assembly is only re-validated on PRs when these files change; every
   # merge-queue run still builds and tests the real image in the
   # "Platform E2E Tests" workflow.
+  #
+  # pull_request-only by design: on merge_group this job is skipped, which
+  # also skips docker-image-builds (its `if` requires a pull_request event and
+  # a successful run of this job), while the placeholder below uses
+  # !cancelled() so it still evaluates and goes green for the merge queue.
   detect-docker-changes:
     name: Detect Docker Changes
     if: ${{ github.event_name == 'pull_request' }}
