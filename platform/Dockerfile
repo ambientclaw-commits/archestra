@@ -166,8 +166,40 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
+# <----- Rust toolchain base stage ----->
+# The toolchain install lives in its own stage, before any source COPY, so the
+# layer stays cached across code changes (it used to sit after the source COPY
+# in builder-base and was reinstalled on every build).
+# The Rust N-API skill sandbox addon is built with this toolchain during the
+# JS workspace build.
+FROM base AS rust-base
+RUN apk add --no-cache build-base cargo rust
+
+# <----- Rust musl smoke base stage ----->
+# Narrow input set for the musl smoke target: only the Rust workspace plus the
+# manifests/node_modules needed to run `pnpm --filter @archestra/sandbox-rs`.
+# backend/frontend/shared stay out of this stage so TS-only changes are full
+# layer-cache hits for the smoke build.
+FROM rust-base AS rust-smoke-base
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
+COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
+COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
+
+FROM rust-smoke-base AS sandbox-rs-musl-smoke
+# cache cargo registry/git + the workspace target dir so heavy deps
+# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    pnpm --filter @archestra/sandbox-rs check:musl
+
 # <----- Builder base stage ----->
-FROM base AS builder-base
+FROM rust-base AS builder-base
 WORKDIR /app
 
 # Version arg for Sentry release tracking
@@ -189,22 +221,11 @@ COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
 
-# Build the Rust N-API skill sandbox addon during the JS workspace build.
-RUN apk add --no-cache build-base cargo rust
-
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
-
-FROM builder-base AS sandbox-rs-musl-smoke
-# cache cargo registry/git + the workspace target dir so heavy deps
-# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder

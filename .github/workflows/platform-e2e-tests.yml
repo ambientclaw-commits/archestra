@@ -3,6 +3,8 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
+# The nightly schedule additionally runs the cross-browser (firefox/webkit)
+# projects, which are excluded from merge-queue runs to keep them fast.
 on:
   workflow_dispatch:
   pull_request:
@@ -12,6 +14,8 @@ on:
       - reopened
       - labeled
   merge_group:
+  schedule:
+    - cron: "0 3 * * *"
 
 permissions: {}
 
@@ -41,37 +45,20 @@ jobs:
       - name: Skip full image build on ordinary PR updates
         run: echo "Full E2E image builds run on merge queue or when the run-e2e label is added."
 
-  # Build Docker images for e2e tests (platform and MCP server base).
-  # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
+  # Build both Docker images for e2e tests (platform and MCP server base) in a
+  # single job: the MCP base build takes seconds, so a dedicated job only added
+  # a second runner-queue wait that gated every E2E shard.
+  # Trusted PRs and merge queue runs push the images to Artifact Registry so
   # each E2E shard can pull layers directly instead of downloading a tarball artifact.
   # Fork PRs still fall back to artifacts because they do not receive OIDC-backed secrets.
   platform-e2e-build:
-    name: Build ${{ matrix.name }} Image
-    runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    name: Build Platform Image
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e' }}
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
-            context: ./platform
-            dockerfile: ""
-            artifact-name: platform-docker-image
-            tarball-name: platform-image.tar.gz
-            local-tag-prefix: archestra-platform
-            use-build-action: true
-          - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
-            artifact-name: mcp-server-base-docker-image
-            tarball-name: mcp-server-base-image.tar.gz
-            local-tag-prefix: mcp-server-base
-            use-build-action: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -80,79 +67,93 @@ jobs:
           fetch-depth: 1
 
       - name: Setup environment
-        if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
 
-      - name: Build Platform image
-        if: ${{ matrix.use-build-action && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
-        uses: ./.github/actions/build-docker-image
-        with:
-          context: ${{ matrix.context }}
-          load: "true"
-          tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
-          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
       - name: Authenticate to Google Artifact Registry
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
         with:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      - name: Build Platform image and push to Artifact Registry
-        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+      - name: Build Platform image
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/build-docker-image
         with:
-          context: ${{ matrix.context }}
+          context: ./platform
+          load: "true"
+          tags: archestra-platform:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Build Platform image and push to Artifact Registry
+        if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
           push: "true"
           tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
-      - name: Authenticate to Google Artifact Registry
-        if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
-        uses: ./.github/actions/auth-to-gar
-        with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
+      # The Blacksmith builder is already set up by the platform image build above.
       - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/blacksmith-build-push
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: ./platform/mcp_server_docker_image
+          file: ./platform/mcp_server_docker_image/Dockerfile
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('mcp-server-base:{0}', github.sha) }}
 
-      # Export as artifact for fast co-located downloads in E2E jobs
-      - name: Export Docker image as tarball
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+      # Export as artifacts for fast co-located downloads in E2E jobs (fork PRs only)
+      - name: Export Docker images as tarballs
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         env:
           GIT_SHA: ${{ github.sha }}
-          LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
-          TARBALL_NAME: ${{ matrix.tarball-name }}
         run: |
-          docker save "${LOCAL_TAG_PREFIX}:${GIT_SHA}" | gzip > "/tmp/${TARBALL_NAME}"
-          ls -lh "/tmp/${TARBALL_NAME}"
+          docker save "archestra-platform:${GIT_SHA}" | gzip > /tmp/platform-image.tar.gz
+          docker save "mcp-server-base:${GIT_SHA}" | gzip > /tmp/mcp-server-base-image.tar.gz
+          ls -lh /tmp/platform-image.tar.gz /tmp/mcp-server-base-image.tar.gz
 
-      - name: Upload Docker image artifact
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+      - name: Upload platform image artifact
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: ${{ matrix.artifact-name }}
-          path: /tmp/${{ matrix.tarball-name }}
+          name: platform-docker-image
+          path: /tmp/platform-image.tar.gz
           retention-days: 1
           compression-level: 0 # Already gzipped
+
+      - name: Upload MCP server base image artifact
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: mcp-server-base-docker-image
+          path: /tmp/mcp-server-base-image.tar.gz
+          retention-days: 1
+          compression-level: 0 # Already gzipped
+
+  # Keeps the "Build MCP Server Base Image" required-check name alive now that
+  # both images are built inside the single platform-e2e-build job above.
+  platform-e2e-build-mcp-check:
+    name: Build MCP Server Base Image
+    runs-on: ubuntu-latest
+    needs: [platform-e2e-build]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e') }}
+    steps:
+      - name: Check build result
+        env:
+          BUILD_RESULT: ${{ needs.platform-e2e-build.result }}
+        run: |
+          echo "Image build job result: ${BUILD_RESULT}"
+          if [ "${BUILD_RESULT}" != "success" ]; then
+            echo "The combined image build job did not succeed."
+            exit 1
+          fi
 
   platform-e2e-tests-placeholder:
     name: Platform E2E Tests
@@ -166,17 +167,19 @@ jobs:
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests-shards:
-    name: Platform E2E Tests Shard (${{ matrix.shard }}/3)
+    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 180
+    # Successful runs finish in well under 15 minutes; a hung run must fail
+    # fast instead of holding a 16vcpu runner for hours.
+    timeout-minutes: 30
     strategy:
       # A failing shard must not cancel its siblings: a cancelled leg would
       # collapse the matrix result to "cancelled" and produce a partial report.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -227,15 +230,17 @@ jobs:
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
 
+      # Cross-browser projects (firefox/webkit) run only on the nightly
+      # schedule and manual dispatch; merge-queue runs stay chromium-only.
       - name: Run all non-quickstart E2E tests
         id: e2e
         continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s
-          shard: "--shard=${{ matrix.shard }}/3"
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
+          shard: "--shard=${{ matrix.shard }}/2"
           extra_args: "--grep-invert '@quickstart'"
-          timeout: "120"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -314,7 +319,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run (shard ${SHARD}/3) failed."
+          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
           exit 1
 
   # Fan-in gate that carries the "Platform E2E Tests" required status check.
@@ -325,7 +330,7 @@ jobs:
   platform-e2e-tests:
     name: Platform E2E Tests
     needs: [platform-e2e-tests-shards]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check shard results
@@ -352,9 +357,9 @@ jobs:
   platform-readonly-vault-e2e-tests:
     name: Platform E2E Tests (Readonly Vault)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -407,7 +412,7 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: credentials-with-vault
-          timeout: "90"
+          timeout: "20"
 
       - name: Upload blob report
         if: ${{ !cancelled() }}
@@ -500,8 +505,9 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -738,8 +744,9 @@ jobs:
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests-shards, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.
       pull-requests: write # Required for playwright-report-summary to comment on PRs.

@@ -114,6 +114,9 @@ runs:
           KUBE_ARGS+=("-e" "KUBECONFIG=/root/.kube/config")
         fi
 
+        # Bound the whole Playwright run so a hung test session fails fast
+        # instead of riding out the job-level timeout.
+        timeout "${TIMEOUT_MINUTES}m" \
         docker run --rm \
           --network host \
           --ipc=host \

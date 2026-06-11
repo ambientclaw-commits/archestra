@@ -182,11 +182,14 @@ jobs:
       contents: read # Required to checkout the repository and diff dependency manifests.
       pull-requests: write # Required for dependency-review-action PR comments.
     steps:
+      # The action diffs dependency manifests via the GitHub API; it only needs
+      # the workspace for an optional config file (not used here), so a shallow
+      # checkout is enough. fetch-depth 0 cost ~75s per run on this repo.
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Dependency review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
@@ -384,6 +387,53 @@ jobs:
 
           echo "✅ All validation checks passed"
 
+      # Validates the production build (next build, backend build, Rust N-API)
+      # on every push. This is what lets docker-image-builds skip on PRs that
+      # don't touch image-assembly files: the app build itself is still gated
+      # here, with turbo remote caching instead of a full image build.
+      # Runs last so its outputs can't pollute the generated-files diff checks.
+      - name: Production build
+        run: pnpm build
+
+  # Detects whether a PR touches files that affect Docker image assembly
+  # itself (as opposed to app code, which "Production build" above validates).
+  # Image assembly is only re-validated on PRs when these files change; every
+  # merge-queue run still builds and tests the real image in the
+  # "Platform E2E Tests" workflow.
+  detect-docker-changes:
+    name: Detect Docker Changes
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    outputs:
+      docker-relevant: ${{ steps.diff.outputs.docker-relevant }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Diff against PR base
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          DOCKER_PATHS='^(platform/Dockerfile|platform/\.dockerignore|platform/docker/|platform/mcp_server_docker_image/|platform/helm/dagger-runtime/|platform/archestra-rs/|platform/package\.json|platform/pnpm-lock\.yaml|platform/pnpm-workspace\.yaml|platform/turbo\.json|\.github/workflows/on-pull-requests\.yml|\.github/actions/build-docker-image/|\.github/actions/blacksmith-build-push/|\.github/actions/setup-blacksmith-builder/)'
+          if echo "$CHANGED_FILES" | grep -qE "$DOCKER_PATHS"; then
+            echo "docker-relevant=true" >> "$GITHUB_OUTPUT"
+            echo "Docker-relevant changes detected - full image builds will run."
+          else
+            echo "docker-relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No docker-relevant changes - image builds are covered by the merge queue."
+          fi
+
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -450,9 +500,29 @@ jobs:
           path: platform/frontend/test-results/
           retention-days: "7"
 
+  # Required-check placeholder for runs where the full image build is skipped:
+  # merge-queue runs (the "Platform E2E Tests" workflow builds and tests the
+  # identical image for the same SHA) and PR pushes that don't touch
+  # image-assembly files (the app build is gated by "Production build" in
+  # platform-lint-and-unit-tests).
+  docker-image-builds-placeholder:
+    name: Docker Image Builds (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: [detect-docker-changes]
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && needs.detect-docker-changes.result == 'success' && needs.detect-docker-changes.outputs.docker-relevant != 'true')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [Platform, MCP Server Base]
+    steps:
+      - name: Skip full image build
+        run: echo "Image assembly unchanged by this PR (or merge-queue run); the E2E workflow builds and tests the real image before merge."
+
   docker-image-builds:
     name: Docker Image Builds (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
+    needs: [detect-docker-changes]
+    if: ${{ github.event_name == 'pull_request' && needs.detect-docker-changes.outputs.docker-relevant == 'true' }}
     permissions:
       contents: read # Required to checkout the repository and read Docker build inputs.
     strategy:
@@ -484,13 +554,14 @@ jobs:
         with:
           working-directory: ./platform
 
+      # Build-only validation: nothing in this job runs the image, so skip the
+      # multi-GB export into the Docker daemon (no load/push).
       - name: Build Platform image
         if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           dockerfile: ${{ matrix.dockerfile }}
-          load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
@@ -512,6 +583,8 @@ jobs:
         if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/setup-blacksmith-builder
 
+      # Build-only validation: nothing in this job runs the image, so skip the
+      # export into the Docker daemon (no load/push).
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/blacksmith-build-push
@@ -520,7 +593,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
-          load: true
+          load: false
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
   helm-chart-linting-and-tests:
