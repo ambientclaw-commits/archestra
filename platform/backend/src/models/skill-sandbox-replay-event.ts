@@ -8,6 +8,7 @@ import type {
   SkillVersionFile,
 } from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
+import { sanitizePostgresText } from "@/utils/sanitize-postgres";
 
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
@@ -66,7 +67,7 @@ class SkillSandboxReplayEventModel {
     return await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.skillSandboxCommandsTable)
-        .values(command)
+        .values(sanitizeCommand(command))
         .returning();
       if (!row) {
         throw new Error("failed to insert sandbox command");
@@ -191,8 +192,8 @@ class SkillSandboxReplayEventModel {
           .values({
             sandboxId,
             organizationId,
-            command: installCommand.command,
-            cwd: installCommand.cwd,
+            command: sanitizePostgresText(installCommand.command),
+            cwd: sanitizePostgresText(installCommand.cwd),
             stdout: "",
             stderr: "",
             // placeholder result; replay re-executes the install.
@@ -360,4 +361,32 @@ async function allocateSequence(
     );
   }
   return row.next - 1;
+}
+
+function sanitizeCommand(
+  command: InsertSkillSandboxCommand,
+): InsertSkillSandboxCommand {
+  return {
+    ...command,
+    command: sanitizeRequiredText(command.command, "command"),
+    cwd: command.cwd == null ? command.cwd : sanitizePostgresText(command.cwd),
+    stdout:
+      command.stdout === undefined
+        ? undefined
+        : sanitizePostgresText(command.stdout),
+    stderr:
+      command.stderr === undefined
+        ? undefined
+        : sanitizePostgresText(command.stderr),
+  };
+}
+
+function sanitizeRequiredText(
+  value: string | undefined,
+  field: string,
+): string {
+  if (value === undefined) {
+    throw new Error(`missing sandbox command field ${field}`);
+  }
+  return sanitizePostgresText(value);
 }

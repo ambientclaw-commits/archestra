@@ -1,7 +1,9 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
+  TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -189,15 +191,22 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const count = await ToolModel.backfillSkillToolsToOrgAgents(org.id);
     expect(count).toBe(2);
 
-    const skillToolNames = [
+    const defaultSkillToolNames = [
+      TOOL_LIST_SKILLS_FULL_NAME,
       TOOL_LOAD_SKILL_FULL_NAME,
+    ];
+    const authoringSkillToolNames = [
       TOOL_CREATE_SKILL_FULL_NAME,
+      TOOL_UPDATE_SKILL_FULL_NAME,
     ];
     for (const agentId of [agentA.id, agentB.id]) {
       const tools = await ToolModel.getMcpToolsByAgent(agentId);
       const names = tools.map((t) => t.name);
-      for (const skillTool of skillToolNames) {
+      for (const skillTool of defaultSkillToolNames) {
         expect(names).toContain(skillTool);
+      }
+      for (const skillTool of authoringSkillToolNames) {
+        expect(names).not.toContain(skillTool);
       }
     }
   });
@@ -341,13 +350,14 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const enabledNames = (
       await ToolModel.getMcpToolsByAgent(enabledAgent.id)
     ).map((t) => t.name);
-    expect(enabledNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
+    expect(enabledNames).toContain(TOOL_LOAD_SKILL_FULL_NAME);
+    expect(enabledNames).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
 
     // org that never opted in is left untouched
     const disabledNames = (
       await ToolModel.getMcpToolsByAgent(disabledAgent.id)
     ).map((t) => t.name);
-    expect(disabledNames).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
+    expect(disabledNames).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   test("backfillNewSkillToolsToEnabledOrgs is a no-op when no skill tools were created", async ({

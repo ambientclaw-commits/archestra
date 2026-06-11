@@ -517,7 +517,7 @@ def _save_verifier_artifacts(
 
 
 def _skill_matches(detail: Mapping[str, JsonValue], skill: AdaptedSkill) -> bool:
-    if detail.get("content") != skill.skill_markdown:
+    if detail.get("content") != _persisted_skill_content(skill.skill_markdown):
         return False
     expected_files = {path: _as_text(data) for path, data in skill.files}
     raw_files = detail.get("files")
@@ -536,6 +536,16 @@ def _skill_matches(detail: Mapping[str, JsonValue], skill: AdaptedSkill) -> bool
             return False
         actual_files[path] = content
     return actual_files == expected_files
+
+
+def _persisted_skill_content(skill_markdown: str) -> str:
+    lines = skill_markdown.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return skill_markdown.rstrip("\r\n")
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "".join(lines[index + 1 :]).lstrip("\r\n").rstrip("\r\n")
+    return skill_markdown.rstrip("\r\n")
 
 
 def _as_text(data: bytes) -> str:

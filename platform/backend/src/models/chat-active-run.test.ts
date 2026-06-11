@@ -84,6 +84,40 @@ test("appends and reads ordered active chat run events", async ({
   ]);
 });
 
+test("escapes NUL bytes before persisting active chat run events", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 1,
+    payloads: [{ type: "text-delta", id: "text-1", delta: "a\0b" }],
+  });
+
+  const events = await ActiveChatRunModel.readEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(events[0]?.payloads).toEqual([
+    { type: "text-delta", id: "text-1", delta: "a\\0b" },
+  ]);
+});
+
 test("appends active chat run events without touching the run every time", async ({
   makeAgent,
   makeConversation,

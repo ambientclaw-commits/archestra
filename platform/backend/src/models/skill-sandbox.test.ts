@@ -280,6 +280,40 @@ describe("SkillSandboxReplayEventModel", () => {
     expect(refreshed?.nextReplaySequence).toBe(4);
   });
 
+  test("escapes NUL bytes before persisting command output", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+
+    await SkillSandboxReplayEventModel.appendCommand({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      command: "printf nul",
+      cwd: null,
+      stdout: "a\0b",
+      stderr: "c\0d",
+      exitCode: 0,
+      durationMs: 1,
+      timeoutSeconds: 30,
+    });
+
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const [entry] = log;
+    if (entry?.kind !== "command") {
+      throw new Error("expected command replay entry");
+    }
+    expect(entry.command.stdout).toBe("a\\0b");
+    expect(entry.command.stderr).toBe("c\\0d");
+  });
+
   test("appendSkillMount records every install command in order within the mount transaction", async ({
     makeOrganization,
     makeUser,

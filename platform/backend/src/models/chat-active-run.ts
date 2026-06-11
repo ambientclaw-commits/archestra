@@ -6,6 +6,7 @@ import type {
   ChatActiveRunEvent,
   ChatActiveRunStatus,
 } from "@/types";
+import { sanitizePostgresJson } from "@/utils/sanitize-postgres";
 
 class ActiveChatRunModel {
   static async create(params: {
@@ -34,12 +35,13 @@ class ActiveChatRunModel {
     if (params.payloads.length === 0) {
       return;
     }
+    const payloads = sanitizePostgresJson(params.payloads);
 
     if (!params.touchRun) {
       await db.insert(schema.chatActiveRunEventsTable).values({
         runId: params.runId,
         seq: params.seq,
-        payloads: params.payloads,
+        payloads,
       });
       return;
     }
@@ -48,7 +50,7 @@ class ActiveChatRunModel {
       await tx.insert(schema.chatActiveRunEventsTable).values({
         runId: params.runId,
         seq: params.seq,
-        payloads: params.payloads,
+        payloads,
       });
       await tx
         .update(schema.chatActiveRunsTable)

@@ -356,9 +356,19 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Agent Skill tools — only assigned to agents once an org admin opts in via
- * the "Enable and create a new skill" empty-state action on /agents/skills
- * (sets `organization.skillToolsEnabled`).
+ * Agent Skill consumption tools assigned once an org admin opts in via the
+ * "Enable and create a new skill" empty-state action on /agents/skills
+ * (sets `organization.skillToolsEnabled`). Authoring tools are intentionally
+ * omitted: they require explicit assignment.
+ */
+export const DEFAULT_SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_LIST_SKILLS_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * All Agent Skill tools, including authoring tools. Use this when grouping or
+ * filtering the skill tool family, not for default assignment.
  */
 export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,

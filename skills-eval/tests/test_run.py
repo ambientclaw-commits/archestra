@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from eval_client import EvalClient
-from run import _run_model_task
-from tasks import AdaptedTask, TaskConfig, VerifierSpec
+from run import _run_model_task, _skill_matches
+from tasks import AdaptedSkill, AdaptedTask, TaskConfig, VerifierSpec
 
 _CHAT_EVENTS = [
     {"type": "tool-input-available", "toolCallId": "c1", "toolName": "run_command"},
@@ -274,6 +274,27 @@ def test_run_model_task_finalizes_artifacts_before_verifier_infrastructure_error
     assert (run_dir / "report.json").exists()
     assert "verifier infrastructure error" in str(metadata["agent_error"])
     assert any(record["kind"] == "verifier_infrastructure_error" for record in trajectory)
+
+
+def test_skill_matches_backend_persisted_content_without_frontmatter() -> None:
+    skill = AdaptedSkill(
+        name="demo",
+        skill_markdown="---\nname: demo\ndescription: Demo\n---\n\n# Demo\n\nUse it.\n",
+        files=(("resource.txt", b"hello"),),
+    )
+    detail = {
+        "content": "# Demo\n\nUse it.",
+        "files": [{"path": "resource.txt", "content": "hello", "encoding": "utf8"}],
+    }
+
+    assert _skill_matches(detail, skill)
+
+
+def test_skill_matches_content_without_frontmatter_unchanged() -> None:
+    skill = AdaptedSkill(name="demo", skill_markdown="# Demo\n", files=())
+    detail = {"content": "# Demo", "files": []}
+
+    assert _skill_matches(detail, skill)
 
 
 def _config(tmp_path: Path, *, data_file: str = "data.json") -> TaskConfig:

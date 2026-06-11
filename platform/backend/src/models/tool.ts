@@ -6,9 +6,9 @@ import {
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  DEFAULT_SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -1133,7 +1133,9 @@ class ToolModel {
   static async backfillNewSkillToolsToEnabledOrgs(
     newlyCreatedToolNames: string[],
   ): Promise<void> {
-    const skillShortNames = new Set<string>(SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
+    const skillShortNames = new Set<string>(
+      DEFAULT_SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
     const hasNewSkillTool = newlyCreatedToolNames.some((name) => {
       const shortName = extractArchestraBuiltInShortName(name);
       return shortName !== null && skillShortNames.has(shortName);
@@ -1177,8 +1179,8 @@ class ToolModel {
       options?.organization ??
       (await OrganizationModel.getById(organizationId));
     archestraMcpBranding.syncFromOrganization(organization);
-    const skillToolNames = SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
-      archestraMcpBranding.getToolName(shortName),
+    const skillToolNames = DEFAULT_SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map(
+      (shortName) => archestraMcpBranding.getToolName(shortName),
     );
 
     const skillTools = await db
