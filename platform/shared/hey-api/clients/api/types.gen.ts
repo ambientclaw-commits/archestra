@@ -31656,6 +31656,7 @@ export type GetInternalMcpCatalogResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -31788,6 +31789,7 @@ export type CreateInternalMcpCatalogItemData = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant?: boolean;
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -31984,6 +31986,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -32277,6 +32280,7 @@ export type GetInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;
@@ -32406,6 +32410,7 @@ export type UpdateInternalMcpCatalogItemData = {
             description?: string;
         }> | null;
         serverType?: 'local' | 'remote' | 'builtin';
+        dynamicConnectionMcpServerId?: string | null;
         serverUrl?: string | null;
         docsUrl?: string | null;
         clientSecretId?: string | null;
@@ -32603,6 +32608,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin';
         multitenant: boolean;
+        dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
         clientSecretId: string | null;

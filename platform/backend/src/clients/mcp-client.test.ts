@@ -495,6 +495,183 @@ describe("McpClient", () => {
       });
     });
 
+    // The catalog item defines how agents connect when credentials resolve at
+    // call time: NULL = strictly the caller's own connection (no team/org
+    // fallback); a pinned mcp_servers.id = a service account every call uses.
+    describe("agent connections (catalog dynamic-connection policy)", () => {
+      async function makeDynamicCatalogTool() {
+        const catalogItem = await InternalMcpCatalogModel.create({
+          name: `connected-server-${randomUUID().slice(0, 8)}`,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+        });
+        const tool = await ToolModel.createToolIfNotExists({
+          name: `${catalogItem.name}__do_thing`,
+          description: "Connection-policy tool",
+          parameters: {},
+          catalogId: catalogItem.id,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "dynamic",
+        });
+        return { catalogItem, tool };
+      }
+
+      function userToken(userId: string, organizationId: string) {
+        return {
+          tokenId: "tok-user",
+          teamId: null,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId,
+          organizationId,
+        };
+      }
+
+      test("resolve at call time never borrows team or org connections", async ({
+        makeMember,
+        makeOrganization,
+        makeTeam,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+        const team = await makeTeam(org.id, user.id);
+        const { TeamModel } = await import("@/models");
+        await TeamModel.addMember(team.id, user.id, "member");
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        // Team (the user is a member) and org connections exist — but the user
+        // has not connected their own account.
+        await McpServerModel.create({
+          name: `${catalogItem.name}-team`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          teamId: team.id,
+        });
+        await McpServerModel.create({
+          name: `${catalogItem.name}-org`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          scope: "org",
+        });
+
+        const result = await mcpClient.executeToolCall(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentId,
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "Authentication required",
+        );
+        expect(mockCallTool).not.toHaveBeenCalled();
+      });
+
+      test("resolve at call time uses the caller's own connection", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via own connection" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentId,
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("a pinned service-account connection is used for any caller", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const serviceAccount = await McpServerModel.create({
+          name: `${catalogItem.name}-org`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          scope: "org",
+        });
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: serviceAccount.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via service account" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentId,
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+
+      test("a revoked pinned connection degrades to resolve at call time", async ({
+        makeMember,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "member" });
+
+        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        // Pin points at a connection that no longer exists; the caller's own
+        // connection takes over.
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          dynamicConnectionMcpServerId: randomUUID(),
+        });
+        await McpServerModel.create({
+          name: `${catalogItem.name}-personal`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: user.id,
+        });
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "via own connection" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          { id: "call_conn", name: tool.name, arguments: {} },
+          agentId,
+          userToken(user.id, org.id),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
+      });
+    });
+
     test("expires idle active connections and recreates them on the next tool call", async () => {
       vi.useFakeTimers();
 
@@ -1457,7 +1634,7 @@ describe("McpClient", () => {
         });
       });
 
-      test("resolves org-scoped server for user when no personal or team server exists", async ({
+      test("resolves the pinned org service account when the user has no connection", async ({
         makeUser,
         makeOrganization,
         makeMember,
@@ -1478,13 +1655,18 @@ describe("McpClient", () => {
           "linear-org-secret",
         );
 
-        await McpServerModel.create({
+        const orgServer = await McpServerModel.create({
           name: "linear-org",
           catalogId: dynCatalog.id,
           secretId: orgSecret.id,
           serverType: "remote",
           ownerId: admin.id,
           scope: "org",
+        });
+        // The org install only serves other callers when pinned as the
+        // catalog's service-account connection.
+        await InternalMcpCatalogModel.update(dynCatalog.id, {
+          dynamicConnectionMcpServerId: orgServer.id,
         });
 
         const tool = await ToolModel.createToolIfNotExists({

@@ -1,0 +1,1 @@
+ALTER TABLE "internal_mcp_catalog" ADD COLUMN "dynamic_connection_mcp_server_id" uuid;

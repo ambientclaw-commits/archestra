@@ -2,23 +2,35 @@
 
 import {
   ADMIN_ROLE_NAME,
+  DocsPage,
   E2eTestId,
   formatSecretStorageType,
+  getDocsUrl,
   getManageCredentialsAddToTeamOptionTestId,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
 import {
   AlertTriangle,
+  ArrowRight,
+  Bot,
   ChevronDown,
+  KeyRound,
   PlugZap,
   Plus,
   RefreshCw,
   Trash,
   User,
+  Zap,
 } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -64,9 +76,14 @@ import {
   setOAuthMcpServerId,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useInternalMcpCatalog,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
 interface ManageUsersDialogProps {
@@ -380,6 +397,7 @@ export function ManageUsersContent({
       )}
 
       <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
+        {catalogItem && <AgentConnectionsSection item={catalogItem} />}
         {(() => {
           const split = splitByScope(allServers);
           const hasContent = allServers.length > 0;
@@ -923,5 +941,170 @@ function UnifiedConnectionsTable({
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+// The catalog-level "agent connections" policy. NULL (default) = calls run on
+// behalf of the caller with their own connection; an mcp_servers.id = a pinned
+// service-account connection every runtime-resolved call uses. Saves on
+// change; gated by the same authorization as editing the catalog item. The
+// flow diagram re-renders with the selection so the effect is visible before
+// anything runs.
+function AgentConnectionsSection({
+  item,
+}: {
+  item: NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+}) {
+  const { canModify } = useCanModifyCatalogItem(item);
+  const updateMutation = useUpdateInternalMcpCatalogItem();
+  const { data: servers = [] } = useMcpServers();
+  const pinnedId = item.dynamicConnectionMcpServerId ?? null;
+  const pinnedServer = pinnedId
+    ? servers.find((server) => server.id === pinnedId)
+    : undefined;
+  const isOnBehalfOf = !pinnedId;
+  const pinRevoked = !!pinnedId && !pinnedServer;
+
+  const pinnedLabel = pinnedServer
+    ? (pinnedServer.scope ?? (pinnedServer.teamId ? "team" : "personal")) ===
+      "org"
+      ? "Organization connection"
+      : pinnedServer.teamId
+        ? (pinnedServer.teamDetails?.name ?? "Team connection")
+        : (pinnedServer.ownerEmail ?? "Personal connection")
+    : "Revoked connection";
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-0.5">
+          <h4 className="text-sm font-semibold">Agent connections</h4>
+          <p className="text-xs text-muted-foreground">
+            Whose credential agents use when a tool call resolves it at runtime.
+          </p>
+        </div>
+        <TokenSelect
+          catalogId={item.id}
+          value={pinnedId ?? DYNAMIC_CREDENTIAL_VALUE}
+          disabled={!canModify || updateMutation.isPending}
+          shouldSetDefaultValue={false}
+          dynamicOptionLabel="On behalf of the caller"
+          dynamicOptionDescription="Each caller's own connection, resolved when the tool runs."
+          onValueChange={(value) =>
+            updateMutation.mutate({
+              id: item.id,
+              data: {
+                dynamicConnectionMcpServerId:
+                  !value || value === DYNAMIC_CREDENTIAL_VALUE ? null : value,
+              },
+            })
+          }
+        />
+      </div>
+
+      {/* Flow diagram — follows the selection above */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-background p-3">
+        <FlowNode
+          icon={<User className="h-3.5 w-3.5" />}
+          label={isOnBehalfOf ? "Chatting user" : "Any caller"}
+        />
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <FlowNode icon={<Bot className="h-3.5 w-3.5" />} label="Agent" />
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <FlowNode
+          highlighted
+          warning={pinRevoked}
+          icon={
+            isOnBehalfOf ? (
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+            ) : pinRevoked ? (
+              <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+            ) : (
+              <KeyRound className="h-3.5 w-3.5 text-primary" />
+            )
+          }
+          label={isOnBehalfOf ? "Their own connection" : pinnedLabel}
+          sublabel={
+            isOnBehalfOf ? "on behalf of the caller" : "service account"
+          }
+        />
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <FlowNode
+          icon={
+            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={14} />
+          }
+          label={item.name}
+        />
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {isOnBehalfOf ? (
+          <>
+            Every call runs with the chatting user's own credential from the
+            table below. No connection yet? The call pauses with a connect link
+            — team and organization connections are never borrowed.
+          </>
+        ) : pinRevoked ? (
+          <>
+            The pinned connection no longer exists, so calls currently run on
+            behalf of the caller. Pick a new connection or switch the setting
+            back explicitly.
+          </>
+        ) : (
+          <>
+            Every call goes through this one connection, no matter who is
+            chatting. Revoke it below and the server returns to
+            on-behalf-of-the-caller resolution.
+          </>
+        )}
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        Applies when credentials resolve at runtime: tool assignments set to{" "}
+        <em>Resolve at call time</em> and agents with <em>All tools</em> access.
+        Assignments pinned to a static connection are unaffected.{" "}
+        <ExternalDocsLink
+          href={getDocsUrl(
+            DocsPage.McpAuthentication,
+            "dynamic-credential-resolution",
+          )}
+          className="underline"
+          showIcon={false}
+        >
+          Learn more
+        </ExternalDocsLink>
+      </p>
+    </div>
+  );
+}
+
+function FlowNode({
+  icon,
+  label,
+  sublabel,
+  highlighted = false,
+  warning = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  sublabel?: string;
+  highlighted?: boolean;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 rounded-md border bg-background px-2 py-1.5",
+        highlighted && "border-primary/40 bg-primary/5",
+        warning && "border-destructive/40 bg-destructive/5",
+      )}
+    >
+      {icon}
+      <div className="leading-tight">
+        <div className="text-xs font-medium">{label}</div>
+        {sublabel && (
+          <div className="text-[10px] text-muted-foreground">{sublabel}</div>
+        )}
+      </div>
+    </div>
   );
 }

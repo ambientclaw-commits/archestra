@@ -29,6 +29,10 @@ interface TokenSelectProps {
   assignmentTeamIds?: string[];
   shouldSetDefaultValue: boolean;
   prefersEnterpriseManaged?: boolean;
+  /** Override the dynamic option's label (defaults to "Resolve at call time"). */
+  dynamicOptionLabel?: string;
+  /** Override the dynamic option's description. */
+  dynamicOptionDescription?: string;
 }
 
 /**
@@ -47,6 +51,8 @@ export function TokenSelect({
   assignmentTeamIds,
   shouldSetDefaultValue,
   prefersEnterpriseManaged = false,
+  dynamicOptionLabel = "Resolve at call time",
+  dynamicOptionDescription,
 }: TokenSelectProps) {
   const groupedCredentials = useMcpServersGroupedByCatalog({
     catalogId,
@@ -126,14 +132,15 @@ export function TokenSelect({
           value={DYNAMIC_CREDENTIAL_VALUE}
           className="cursor-pointer"
           description={
-            prefersEnterpriseManaged
+            dynamicOptionDescription ??
+            (prefersEnterpriseManaged
               ? "Ask your identity provider for a runtime credential for this server."
-              : "Use the caller's available runtime credential instead of a fixed connection."
+              : "Use the caller's available runtime credential instead of a fixed connection.")
           }
         >
           <div className="flex items-center gap-1">
             <Zap className="h-3! w-3! text-amber-500" />
-            <span>Resolve at call time</span>
+            <span>{dynamicOptionLabel}</span>
           </div>
         </SelectItem>
         {mcpServers.length > 0 && (

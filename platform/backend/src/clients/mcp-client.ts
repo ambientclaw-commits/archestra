@@ -38,7 +38,6 @@ import {
   McpHttpSessionModel,
   McpServerModel,
   McpToolCallModel,
-  TeamModel,
   ToolModel,
 } from "@/models";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
@@ -1438,10 +1437,44 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // User token: try user's personal server, then team-owned servers for
-    // teams the user belongs to, then fall back to an org-scoped install.
+    // The catalog item defines how agents connect to it. A pinned connection
+    // ("service account") routes every runtime-resolved call through that one
+    // installation, regardless of the caller. The pin is re-validated against
+    // the catalog's installs on every call (no DB-level FK — see the schema
+    // comment), so a revoked connection degrades to resolve-at-call-time.
+    if (catalogItem.dynamicConnectionMcpServerId) {
+      const pinnedServer = allServers.find(
+        (s) => s.id === catalogItem.dynamicConnectionMcpServerId,
+      );
+      if (pinnedServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: pinnedServer.id,
+          },
+          `Dynamic resolution: using the catalog's pinned service-account connection for tool ${toolCall.name}`,
+        );
+        return {
+          targetMcpServerId: pinnedServer.id,
+          mcpServerName: pinnedServer.name,
+        };
+      }
+      logger.warn(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          dynamicConnectionMcpServerId:
+            catalogItem.dynamicConnectionMcpServerId,
+        },
+        "Dynamic resolution: the catalog's pinned connection no longer exists; resolving at call time",
+      );
+    }
+
+    // Resolve at call time: strictly the caller's own connection — a user
+    // token uses that user's install, nothing else. No team or org fallback;
+    // sharing a connection is an explicit choice (the pin above).
     if (tokenAuth.userId) {
-      // Priority 1: Personal credential owned by current user
       const userServer = allServers.find(
         (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
       );
@@ -1460,51 +1493,9 @@ class McpClient {
           mcpServerName: userServer.name,
         };
       }
-
-      // Priority 2: Team-owned server for a team the user is a member of
-      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
-      const userTeamIds = new Set(userTeams.map((t) => t.id));
-      const teamServer = allServers.find(
-        (s) => s.teamId && userTeamIds.has(s.teamId),
-      );
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: teamServer.teamId,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using team-owned server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-
-      // Priority 3: Org-scoped install
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using org-scoped server for user ${tokenAuth.userId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
-        };
-      }
     }
 
-    // Team token: try team-owned servers for the token's team, then fall back
-    // to an org-scoped install.
+    // Team token: the token's own team installation is its identity.
     if (tokenAuth.teamId) {
       const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
       if (teamServer) {
@@ -1520,23 +1511,6 @@ class McpClient {
         return {
           targetMcpServerId: teamServer.id,
           mcpServerName: teamServer.name,
-        };
-      }
-
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: orgServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using org-scoped server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: orgServer.id,
-          mcpServerName: orgServer.name,
         };
       }
     }

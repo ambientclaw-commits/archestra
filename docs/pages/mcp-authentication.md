@@ -171,28 +171,25 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 By default, each MCP server installation has a single credential that is shared by all callers.
 
-When you enable "Resolve at call time" on a server, Archestra resolves the credential dynamically based on the caller's identity. This enables multi-tenant setups where each developer uses their own GitHub PAT or each team member uses their own Jira access token.
+When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra resolves the credential at execution time. Which credential is used is defined on the MCP server itself — the **Agent connections** setting on the server's credentials page:
+
+- **Resolve at call time** (default): strictly the caller's own connection. A user token uses that user's installation; a team token uses that team's installation. There is no fallback — a caller without a connection gets an actionable connect prompt instead of silently borrowing a team or organization credential.
+- **A pinned connection (service account)**: every runtime-resolved call connects through the chosen installation, regardless of the caller. Use this when the whole org or a team should share one upstream account. If the pinned connection is revoked, the server falls back to resolve-at-call-time behavior.
 
 ```mermaid
 flowchart TD
     A["Tool call arrives<br/>with Gateway Token"] --> B{Dynamic credentials<br/>enabled?}
-    B -- No --> C["Use server's<br/>pre-configured credential"]
-    B -- Yes --> D{Caller has<br/>personal credential?}
+    B -- No --> C["Use the assignment's<br/>pinned credential"]
+    B -- Yes --> P{Server pins a<br/>service-account connection?}
+    P -- Yes --> S["Use the pinned<br/>service account"]
+    P -- No --> D{Caller has their<br/>own connection?}
     D -- Yes --> E["Use caller's credential"]
-    D -- No --> F{Team member<br/>has credential?}
-    F -- Yes --> G["Use team member's<br/>credential"]
-    F -- No --> J["Return error +<br/>install link"]
+    D -- No --> J["Return error +<br/>connect link"]
 
+    style S fill:#d4edda,stroke:#28a745
     style E fill:#d4edda,stroke:#28a745
-    style G fill:#d4edda,stroke:#28a745
     style J fill:#f8d7da,stroke:#dc3545
 ```
-
-When dynamic credentials are enabled, Archestra resolves them in priority order:
-
-1. The calling user's own personal credential (highest priority)
-2. A credential owned by a team member on the same team
-3. If no credential is found, an error is returned with an install link
 
 #### Missing Credentials
 
