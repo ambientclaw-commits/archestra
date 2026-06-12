@@ -10,10 +10,15 @@ import type { ModelInfo } from "./types";
  * GitHub OAuth token. `apiKey` is the GitHub token; the Copilot fetch wrapper
  * exchanges it for the short-lived bearer the /models endpoint requires.
  *
- * Copilot lists every model it knows about; entries disabled by org policy
- * (`policy.state: "disabled"`) or hidden from pickers
- * (`model_picker_enabled: false` — dated snapshots, embeddings, etc.) are
- * filtered out to mirror what official Copilot clients offer.
+ * Our proxy adapter only speaks `/chat/completions`, so we list every model
+ * reachable that way and drop the rest. Copilot's `/models` also returns
+ * Responses-API-only models (e.g. `gpt-5.3-codex`, `supported_endpoints:
+ * ["/responses"]`), the Anthropic `/v1/messages` shim, embeddings, and
+ * `completion` models — all of which 400 on `/chat/completions`. We do NOT
+ * filter on `model_picker_enabled`: on some plans the only picker-enabled
+ * model is a Responses-only one, while every usable chat model is
+ * picker=false, so that flag would surface an unusable model and hide the
+ * working ones (verified against a live subscription).
  */
 export async function fetchGithubCopilotModels(
   apiKey: string,
@@ -48,11 +53,7 @@ export async function fetchGithubCopilotModels(
   };
 
   return (Array.isArray(payload.data) ? payload.data : [])
-    .filter(
-      (model) =>
-        model.model_picker_enabled !== false &&
-        model.policy?.state !== "disabled",
-    )
+    .filter(isChatCompletionsModel)
     .map((model) => ({
       id: model.id,
       displayName: model.name || model.id,
@@ -66,6 +67,22 @@ export async function fetchGithubCopilotModels(
 }
 
 // ===== Internal helpers =====
+
+/** True if the model is usable through Copilot's `/chat/completions` endpoint. */
+function isChatCompletionsModel(model: GithubCopilotModel): boolean {
+  if (model.policy?.state === "disabled") return false;
+  // Only chat models work here — exclude embeddings and `completion` models.
+  if (model.capabilities?.type && model.capabilities.type !== "chat") {
+    return false;
+  }
+  // When Copilot states the supported transports, require chat/completions.
+  // (The field is often absent on legacy chat models, which do support it.)
+  const endpoints = model.supported_endpoints;
+  if (Array.isArray(endpoints) && !endpoints.includes("/chat/completions")) {
+    return false;
+  }
+  return true;
+}
 
 function extractErrorMessage(errorText: string): string {
   try {
@@ -82,9 +99,12 @@ function extractErrorMessage(errorText: string): string {
 interface GithubCopilotModel {
   id: string;
   name?: string;
-  model_picker_enabled?: boolean;
+  /** Transports the model supports, e.g. ["/chat/completions"], ["/responses"]. */
+  supported_endpoints?: string[];
   policy?: { state?: string };
   capabilities?: {
+    /** "chat" | "embeddings" | "completion" — only "chat" is usable here. */
+    type?: string;
     limits?: { max_context_window_tokens?: number };
     supports?: { tool_calls?: boolean };
   };

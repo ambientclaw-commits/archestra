@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, Copy, Github, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -87,6 +86,10 @@ export function GithubCopilotSignIn({
     };
   }, [flow, completed]);
 
+  // Step 1: fetch the device code and show it. We deliberately do NOT open the
+  // GitHub tab here — opening a tab steals focus, and the Clipboard API refuses
+  // to write while the document is unfocused, so an auto-copy would silently
+  // fail. The copy + open happen together in copyCodeAndOpen (a fresh gesture).
   const begin = async () => {
     setExpired(false);
     setCompleted(false);
@@ -96,6 +99,28 @@ export function GithubCopilotSignIn({
     } catch {
       // network-level failure — leave the button enabled for another attempt
     }
+  };
+
+  const markCopied = () => {
+    setCodeCopied(true);
+    clearTimeout(copyResetTimeout.current);
+    copyResetTimeout.current = setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  // Step 2: copy the code WHILE the page is still focused, then open GitHub.
+  // Ordering matters — copying before window.open keeps the document focused
+  // for the clipboard write; GitHub can't pre-fill the field (it omits the RFC
+  // 8628 verification_uri_complete field for security), so the copy is the
+  // fastest path to a paste.
+  const copyCodeAndOpen = async (deviceFlow: GithubCopilotDeviceStart) => {
+    try {
+      await navigator.clipboard.writeText(deviceFlow.userCode);
+      markCopied();
+    } catch {
+      // clipboard blocked (permissions/focus) — the visible code + copy button
+      // remain as a fallback
+    }
+    window.open(deviceFlow.verificationUri, "_blank", "noopener,noreferrer");
   };
 
   if (completed) {
@@ -111,42 +136,39 @@ export function GithubCopilotSignIn({
     return (
       <div className="space-y-2 rounded-md border p-3">
         <p className="text-xs text-muted-foreground">
-          Open{" "}
-          <Link
-            href={flow.verificationUri}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            {flow.verificationUri}
-          </Link>{" "}
-          and enter this code:
+          Click below to copy the code and open GitHub, then paste it and
+          approve. GitHub can't pre-fill the code, so you'll paste it there.
         </p>
-        <div className="flex items-center gap-2">
-          <code className="rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest">
-            {flow.userCode}
-          </code>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
+            variant="outline"
+            size="sm"
+            onClick={() => copyCodeAndOpen(flow)}
+          >
+            <Github className="mr-2 h-4 w-4" />
+            Copy code &amp; open GitHub
+          </Button>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
+            aria-label="Copy code"
             onClick={async () => {
-              await navigator.clipboard.writeText(flow.userCode);
-              setCodeCopied(true);
-              clearTimeout(copyResetTimeout.current);
-              copyResetTimeout.current = setTimeout(
-                () => setCodeCopied(false),
-                2000,
-              );
+              try {
+                await navigator.clipboard.writeText(flow.userCode);
+                markCopied();
+              } catch {
+                // clipboard blocked — code stays visible to copy manually
+              }
             }}
           >
+            {flow.userCode}
             {codeCopied ? (
               <Check className="h-4 w-4 text-green-500" />
             ) : (
-              <Copy className="h-4 w-4" />
+              <Copy className="h-4 w-4 text-muted-foreground" />
             )}
-          </Button>
+          </button>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
             Waiting for authorization…

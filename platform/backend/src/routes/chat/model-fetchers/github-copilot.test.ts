@@ -13,7 +13,11 @@ afterEach(() => {
 });
 
 describe("fetchGithubCopilotModels", () => {
-  test("exchanges the GitHub token, then lists and filters Copilot models", async () => {
+  test("exchanges the GitHub token, then keeps only chat/completions-capable models", async () => {
+    // Shapes mirror a real Copilot /models response (verified live): a
+    // Responses-only codex model, the Anthropic /v1/messages shim, embeddings
+    // and `completion` types, a policy-disabled model, and legacy chat models
+    // with no supported_endpoints field.
     const fetchMock = vi.fn().mockImplementation((input: string | URL) => {
       const url = String(input);
       if (url.includes("copilot_internal")) {
@@ -30,25 +34,45 @@ describe("fetchGithubCopilotModels", () => {
             {
               id: "gpt-4o",
               name: "GPT-4o",
-              model_picker_enabled: true,
+              // legacy chat model: no supported_endpoints, picker=false → kept
+              model_picker_enabled: false,
               capabilities: {
+                type: "chat",
                 limits: { max_context_window_tokens: 128000 },
                 supports: { tool_calls: true },
               },
             },
             {
               id: "claude-sonnet-4",
-              // no name → falls back to id; picker flag missing → kept
-              capabilities: { supports: { tool_calls: false } },
+              // no name → falls back to id
+              supported_endpoints: ["/chat/completions"],
+              capabilities: { type: "chat", supports: { tool_calls: false } },
             },
             {
-              id: "gpt-4o-2024-05-13",
-              model_picker_enabled: false,
+              id: "gpt-5.3-codex",
+              // Responses-only — must be dropped even though picker=true
+              model_picker_enabled: true,
+              supported_endpoints: ["/responses"],
+              capabilities: { type: "chat" },
+            },
+            {
+              id: "claude-opus-shim",
+              // Anthropic /v1/messages shim — dropped
+              supported_endpoints: ["/v1/messages"],
+              capabilities: { type: "chat" },
+            },
+            {
+              id: "text-embedding-3-small",
+              capabilities: { type: "embeddings" },
+            },
+            {
+              id: "gpt-41-copilot",
+              capabilities: { type: "completion" },
             },
             {
               id: "o1",
-              model_picker_enabled: true,
               policy: { state: "disabled" },
+              capabilities: { type: "chat" },
             },
           ],
         }),

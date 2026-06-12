@@ -34,6 +34,9 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
       upstream: config.llm["github-copilot"].baseUrl,
       providerName: "GitHubCopilot",
+      // Copilot's API only accepts the exchanged short-lived bearer, so never
+      // forward the raw GitHub token for an unsupported path — reject instead.
+      rejectUnhandledPaths: true,
     }),
   });
 
