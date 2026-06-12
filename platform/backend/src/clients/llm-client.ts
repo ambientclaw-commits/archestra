@@ -13,6 +13,7 @@ import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
@@ -39,6 +40,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -269,6 +271,12 @@ export async function createLLMModelForAgent(params: {
     !isOllama &&
     !isAzureWithEntra
   ) {
+    // Per-user providers (GitHub Copilot) need the acting user's own linked
+    // account; surface a typed error so callers can prompt them to connect
+    // rather than showing a generic "configure a key" message.
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new LlmProviderAuthRequiredError(provider);
+    }
     throw new ApiError(
       400,
       "LLM Provider API key not configured. Please configure it in Provider Settings.",

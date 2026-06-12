@@ -109,6 +109,26 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "vllm",
 ]);
 
+/**
+ * Providers whose credential is an individual user's token rather than a shared
+ * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
+ * account's Copilot seat). Sharing one token across users is a ToS gray area
+ * and breaks per-user attribution, so for these providers:
+ * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
+ * - request-time resolution uses ONLY the acting user's personal key — never an
+ *   agent's attached key, a conversation key, a team/org key, or the shared env
+ *   fallback;
+ * - a missing personal key surfaces a "link your account" prompt, not a fallback.
+ */
+export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
+  new Set<SupportedProvider>(["github-copilot"]);
+
+export function providerRequiresPerUserCredential(
+  provider: SupportedProvider,
+): boolean {
+  return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
+}
+
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;

@@ -28,6 +28,7 @@ import {
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 
 // =============================================================================
 // ProviderError — carries a fully-mapped ChatErrorResponse with correct provider
@@ -1484,6 +1485,20 @@ export function mapProviderError(
   provider: SupportedProvider,
 ): ChatErrorResponse {
   logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
+
+  // Per-user provider with no linked account → an actionable "connect" prompt,
+  // not a generic key error. Carries authAction so the UI renders a link card.
+  if (error instanceof LlmProviderAuthRequiredError) {
+    return {
+      code: ChatErrorCode.ProviderAuthRequired,
+      message: `Connect your ${error.providerLabel} account to use this model.`,
+      isRetryable: false,
+      authAction: {
+        provider: error.provider,
+        providerLabel: error.providerLabel,
+      },
+    };
+  }
 
   // Handle Vercel AI SDK RetryError - extract the lastError and map it
   // RetryError wraps errors from retry attempts and contains the last underlying error
