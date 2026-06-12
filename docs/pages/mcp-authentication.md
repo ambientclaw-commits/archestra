@@ -153,7 +153,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity and available personal or team-scoped credentials.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Agent connections** setting.
 
 #### Static Credentials
 
@@ -169,21 +169,19 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 #### Dynamic Credential Resolution
 
-By default, each MCP server installation has a single credential that is shared by all callers.
+When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
 
-When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra resolves the credential at execution time. Which credential is used is defined on the MCP server itself — the **Agent connections** setting on the server's credentials page:
-
-- **Resolve at call time** (default): strictly the caller's own connection. A user token uses that user's installation; a team token uses that team's installation. There is no fallback — a caller without a connection gets an actionable connect prompt instead of silently borrowing a team or organization credential.
-- **A pinned connection (service account)**: every runtime-resolved call connects through the chosen installation, regardless of the caller. Use this when the whole org or a team should share one upstream account. If the pinned connection is revoked, the server falls back to resolve-at-call-time behavior.
+- **On behalf of the user** (default): strictly the caller's own connection. A user token uses that user's connection; a team token uses that team's. There is no fallback — a caller without a connection gets an actionable connect prompt instead of silently borrowing a team or organization credential.
+- **Always use one account**: every runtime-resolved call goes through the chosen connection, regardless of the caller — a service account. Use this when the whole org or a team should share one upstream account. If that connection is revoked, the server returns to on-behalf-of-the-user resolution.
 
 ```mermaid
 flowchart TD
-    A["Tool call arrives<br/>with Gateway Token"] --> B{Dynamic credentials<br/>enabled?}
+    A["Tool call arrives<br/>with Gateway Token"] --> B{Assignment resolves<br/>credentials at runtime?}
     B -- No --> C["Use the assignment's<br/>pinned credential"]
-    B -- Yes --> P{Server pins a<br/>service-account connection?}
-    P -- Yes --> S["Use the pinned<br/>service account"]
+    B -- Yes --> P{Agent connections set to<br/>one shared account?}
+    P -- Yes --> S["Use that account<br/>(service account)"]
     P -- No --> D{Caller has their<br/>own connection?}
-    D -- Yes --> E["Use caller's credential"]
+    D -- Yes --> E["Use the caller's<br/>own credential"]
     D -- No --> J["Return error +<br/>connect link"]
 
     style S fill:#d4edda,stroke:#28a745

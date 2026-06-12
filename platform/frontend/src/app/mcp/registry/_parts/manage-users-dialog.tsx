@@ -12,8 +12,6 @@ import {
 import { format } from "date-fns";
 import {
   AlertTriangle,
-  ArrowRight,
-  Bot,
   ChevronDown,
   KeyRound,
   PlugZap,
@@ -26,11 +24,6 @@ import {
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import {
-  DYNAMIC_CREDENTIAL_VALUE,
-  TokenSelect,
-} from "@/components/token-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,6 +48,13 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -82,7 +82,6 @@ import {
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMyTeams } from "@/lib/teams/team.query";
-import { cn } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
@@ -385,19 +384,22 @@ export function ManageUsersContent({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Manage credentials
+            Connections
             <span className="text-muted-foreground font-normal">
               {label || firstServer?.name}
             </span>
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Manage credentials
-          </DialogDescription>
+          <DialogDescription className="sr-only">Connections</DialogDescription>
         </DialogHeader>
       )}
 
       <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
-        {catalogItem && <AgentConnectionsSection item={catalogItem} />}
+        {catalogItem && (
+          <AgentConnectionsSection
+            item={catalogItem}
+            connections={allServers}
+          />
+        )}
         {(() => {
           const split = splitByScope(allServers);
           const hasContent = allServers.length > 0;
@@ -442,7 +444,15 @@ export function ManageUsersContent({
 
           return (
             <div className="space-y-2">
-              <div className="flex justify-end">{installMenu}</div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-medium">Connections</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Accounts connected to this server.
+                  </p>
+                </div>
+                {installMenu}
+              </div>
               <Card>
                 <CardContent className="p-0">
                   {hasContent ? (
@@ -944,167 +954,121 @@ function UnifiedConnectionsTable({
   );
 }
 
-// The catalog-level "agent connections" policy. NULL (default) = calls run on
-// behalf of the caller with their own connection; an mcp_servers.id = a pinned
-// service-account connection every runtime-resolved call uses. Saves on
-// change; gated by the same authorization as editing the catalog item. The
-// flow diagram re-renders with the selection so the effect is visible before
-// anything runs.
+// The catalog-level "agent connections" setting as a standard settings row:
+// title, a plain-language description that names the current choice, and a
+// dedicated select whose options are self-explanatory. NULL (default) = agents
+// act on behalf of whoever is chatting, using that person's own connection;
+// an mcp_servers.id = agents always use that one connection. Saves on change;
+// gated by the same authorization as editing the catalog item.
+const ON_BEHALF_OF_VALUE = "__on_behalf_of__";
+
 function AgentConnectionsSection({
   item,
+  connections,
 }: {
   item: NonNullable<Parameters<typeof useCanModifyCatalogItem>[0]>;
+  connections: NonNullable<ReturnType<typeof useMcpServers>["data"]>;
 }) {
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const { data: servers = [] } = useMcpServers();
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
-  const pinnedServer = pinnedId
-    ? servers.find((server) => server.id === pinnedId)
+  const pinnedConnection = pinnedId
+    ? connections.find((connection) => connection.id === pinnedId)
     : undefined;
-  const isOnBehalfOf = !pinnedId;
-  const pinRevoked = !!pinnedId && !pinnedServer;
+  const pinRemoved = Boolean(pinnedId) && !pinnedConnection;
 
-  const pinnedLabel = pinnedServer
-    ? (pinnedServer.scope ?? (pinnedServer.teamId ? "team" : "personal")) ===
-      "org"
-      ? "Organization connection"
-      : pinnedServer.teamId
-        ? (pinnedServer.teamDetails?.name ?? "Team connection")
-        : (pinnedServer.ownerEmail ?? "Personal connection")
-    : "Revoked connection";
+  const connectionLabel = (connection: (typeof connections)[number]) => {
+    const scope = connection.scope ?? (connection.teamId ? "team" : "personal");
+    if (scope === "org") return "Organization account";
+    if (scope === "team")
+      return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
+    return connection.ownerEmail ?? "Unknown user";
+  };
 
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <h4 className="text-sm font-semibold">Agent connections</h4>
-          <p className="text-xs text-muted-foreground">
-            Whose credential agents use when a tool call resolves it at runtime.
-          </p>
-        </div>
-        <TokenSelect
-          catalogId={item.id}
-          value={pinnedId ?? DYNAMIC_CREDENTIAL_VALUE}
-          disabled={!canModify || updateMutation.isPending}
-          shouldSetDefaultValue={false}
-          dynamicOptionLabel="On behalf of the caller"
-          dynamicOptionDescription="Each caller's own connection, resolved when the tool runs."
-          onValueChange={(value) =>
-            updateMutation.mutate({
-              id: item.id,
-              data: {
-                dynamicConnectionMcpServerId:
-                  !value || value === DYNAMIC_CREDENTIAL_VALUE ? null : value,
-              },
-            })
-          }
-        />
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="max-w-xl space-y-1">
+        <h4 className="text-sm font-medium">Agent connections</h4>
+        <p className="text-sm text-muted-foreground">
+          {!pinnedId ? (
+            <>
+              Agents act on behalf of whoever is chatting — each person uses
+              their own connection, and is asked to connect if they haven't yet.
+            </>
+          ) : pinRemoved ? (
+            <>
+              The selected connection was removed. Agents act on behalf of
+              whoever is chatting until you choose another one.
+            </>
+          ) : (
+            <>
+              Agents always connect as{" "}
+              <span className="font-medium text-foreground">
+                {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
+              </span>
+              , no matter who is chatting.
+            </>
+          )}{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.McpAuthentication,
+              "dynamic-credential-resolution",
+            )}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </p>
       </div>
-
-      {/* Flow diagram — follows the selection above */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-background p-3">
-        <FlowNode
-          icon={<User className="h-3.5 w-3.5" />}
-          label={isOnBehalfOf ? "Chatting user" : "Any caller"}
-        />
-        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <FlowNode icon={<Bot className="h-3.5 w-3.5" />} label="Agent" />
-        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <FlowNode
-          highlighted
-          warning={pinRevoked}
-          icon={
-            isOnBehalfOf ? (
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-            ) : pinRevoked ? (
-              <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-            ) : (
-              <KeyRound className="h-3.5 w-3.5 text-primary" />
-            )
-          }
-          label={isOnBehalfOf ? "Their own connection" : pinnedLabel}
-          sublabel={
-            isOnBehalfOf ? "on behalf of the caller" : "service account"
-          }
-        />
-        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <FlowNode
-          icon={
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={14} />
-          }
-          label={item.name}
-        />
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        {isOnBehalfOf ? (
-          <>
-            Every call runs with the chatting user's own credential from the
-            table below. No connection yet? The call pauses with a connect link
-            — team and organization connections are never borrowed.
-          </>
-        ) : pinRevoked ? (
-          <>
-            The pinned connection no longer exists, so calls currently run on
-            behalf of the caller. Pick a new connection or switch the setting
-            back explicitly.
-          </>
-        ) : (
-          <>
-            Every call goes through this one connection, no matter who is
-            chatting. Revoke it below and the server returns to
-            on-behalf-of-the-caller resolution.
-          </>
-        )}
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        Applies when credentials resolve at runtime: tool assignments set to{" "}
-        <em>Resolve at call time</em> and agents with <em>All tools</em> access.
-        Assignments pinned to a static connection are unaffected.{" "}
-        <ExternalDocsLink
-          href={getDocsUrl(
-            DocsPage.McpAuthentication,
-            "dynamic-credential-resolution",
+      <Select
+        value={pinRemoved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+        disabled={!canModify || updateMutation.isPending}
+        onValueChange={(value) =>
+          updateMutation.mutate({
+            id: item.id,
+            data: {
+              dynamicConnectionMcpServerId:
+                value === ON_BEHALF_OF_VALUE ? null : value,
+            },
+          })
+        }
+      >
+        <SelectTrigger className="w-[260px]">
+          <SelectValue placeholder="Connection removed" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={ON_BEHALF_OF_VALUE}
+            className="cursor-pointer"
+            description="Everyone connects their own account."
+          >
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3.5! w-3.5! text-amber-500" />
+              <span>On behalf of the user</span>
+            </div>
+          </SelectItem>
+          {connections.length > 0 && (
+            <>
+              <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                Always use one account
+              </div>
+              {connections.map((connection) => (
+                <SelectItem
+                  key={connection.id}
+                  value={connection.id}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                    <span>{connectionLabel(connection)}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </>
           )}
-          className="underline"
-          showIcon={false}
-        >
-          Learn more
-        </ExternalDocsLink>
-      </p>
-    </div>
-  );
-}
-
-function FlowNode({
-  icon,
-  label,
-  sublabel,
-  highlighted = false,
-  warning = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  sublabel?: string;
-  highlighted?: boolean;
-  warning?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 rounded-md border bg-background px-2 py-1.5",
-        highlighted && "border-primary/40 bg-primary/5",
-        warning && "border-destructive/40 bg-destructive/5",
-      )}
-    >
-      {icon}
-      <div className="leading-tight">
-        <div className="text-xs font-medium">{label}</div>
-        {sublabel && (
-          <div className="text-[10px] text-muted-foreground">{sublabel}</div>
-        )}
-      </div>
+        </SelectContent>
+      </Select>
     </div>
   );
 }
