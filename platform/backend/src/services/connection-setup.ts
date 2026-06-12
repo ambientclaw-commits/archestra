@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
+} from "@archestra/shared";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
@@ -37,6 +40,17 @@ export async function ensureConnectionVirtualKey(params: {
     provider,
     preferredProviderKeyId,
   } = params;
+
+  // Per-user providers (GitHub Copilot) are passthrough-only on the connection
+  // page — each user's own token is sent directly. They can't be wrapped in a
+  // connection virtual key (a shareable token would leak one account's
+  // credential), so don't provision one.
+  if (providerRequiresPerUserCredential(provider)) {
+    throw new ApiError(
+      400,
+      `${provider} is per-user and uses passthrough auth — it can't be provisioned as a virtual key. Each user connects their own account.`,
+    );
+  }
 
   const providerApiKey =
     (await resolvePreferredProviderKey({

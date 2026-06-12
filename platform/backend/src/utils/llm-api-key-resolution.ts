@@ -50,7 +50,9 @@ export async function resolveProviderApiKey(params: {
       conversationId: conversationId ?? null,
       agentLlmApiKeyId,
     });
-  } else {
+  } else if (!providerRequiresPerUserCredential(provider)) {
+    // Per-user providers have no org-scope key to fall back to, and there's no
+    // acting user to resolve a personal key — leave it unresolved.
     resolvedApiKey = await LlmProviderApiKeyModel.findByScope(
       organizationId,
       provider,
