@@ -122,6 +122,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   deepseek: "deepseek",
   minimax: "minimax",
   azure: "azure",
+  "github-copilot": "github-copilot",
 };
 
 /**

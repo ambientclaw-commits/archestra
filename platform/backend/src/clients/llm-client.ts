@@ -445,6 +445,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
   },
 
+  "github-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl), and
+    // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
+    // the short-lived Copilot bearer — exchanging here too would hand the
+    // proxy an already-exchanged bearer it cannot exchange again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["github-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
+  },
+
   azure: {
     createModel: ({
       apiKey,

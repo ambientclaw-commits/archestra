@@ -11,6 +11,7 @@ import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -251,6 +252,16 @@ const PROVIDER_CONFIG: Record<
     consoleName: "Azure Portal",
     description:
       "Use your Azure OpenAI or Foundry URL for deployment discovery. If runtime traffic uses a different Azure OpenAI endpoint, set the optional inference URL below.",
+  },
+  "github-copilot": {
+    name: "GitHub Copilot",
+    icon: "/icons/github-copilot.png",
+    placeholder: "gho_... (GitHub OAuth token)",
+    enabled: true,
+    consoleUrl: "https://github.com/settings/copilot",
+    consoleName: "GitHub Copilot Settings",
+    description:
+      "Copilot has no static API keys: paste the GitHub OAuth token of an account with a Copilot subscription (the Copilot CLI stores one in ~/.config/github-copilot/apps.json, or use the connection page to sign in with GitHub). Model access follows that account's subscription.",
   },
 } as const;
 
@@ -657,6 +668,14 @@ export function LlmProviderApiKeyForm({
                     <CheckCircle2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-green-500" />
                   )}
                 </div>
+                {provider === "github-copilot" && (
+                  <GithubCopilotSignIn
+                    disabled={isPending}
+                    onToken={(token) =>
+                      form.setValue("apiKey", token, { shouldDirty: true })
+                    }
+                  />
+                )}
                 {showConsoleLink && (
                   <p className="text-xs text-muted-foreground">
                     Get your API key from{" "}

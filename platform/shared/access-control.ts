@@ -838,6 +838,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateLlmProviderApiKey]: {
     llmProviderApiKey: ["create"],
   },
+  // Device-flow sign-in exists solely to obtain the GitHub token for a new
+  // personal github-copilot provider key, so it carries the same permission.
+  [RouteId.GithubCopilotDeviceAuthStart]: {
+    llmProviderApiKey: ["create"],
+  },
+  [RouteId.GithubCopilotDeviceAuthPoll]: {
+    llmProviderApiKey: ["create"],
+  },
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },

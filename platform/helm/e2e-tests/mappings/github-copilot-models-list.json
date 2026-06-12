@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/github-copilot/models.*",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "object": "list",
+      "data": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "model_picker_enabled": true,
+          "capabilities": {
+            "limits": { "max_context_window_tokens": 128000 },
+            "supports": { "tool_calls": true }
+          }
+        },
+        {
+          "id": "claude-sonnet-4",
+          "name": "Claude Sonnet 4",
+          "model_picker_enabled": true,
+          "capabilities": {
+            "limits": { "max_context_window_tokens": 200000 },
+            "supports": { "tool_calls": true }
+          }
+        },
+        {
+          "id": "gpt-4o-2024-05-13",
+          "name": "GPT-4o (2024-05-13)",
+          "model_picker_enabled": false
+        },
+        {
+          "id": "o1",
+          "name": "o1",
+          "model_picker_enabled": true,
+          "policy": { "state": "disabled" }
+        }
+      ]
+    }
+  }
+}

@@ -268,6 +268,19 @@ export const RouteId = {
     "minimaxChatCompletionsWithDefaultAgent",
   MinimaxChatCompletionsWithAgent: "minimaxChatCompletionsWithAgent",
 
+  // Proxy Routes - GitHub Copilot
+  GithubCopilotChatCompletionsWithDefaultAgent:
+    "githubCopilotChatCompletionsWithDefaultAgent",
+  GithubCopilotChatCompletionsWithAgent:
+    "githubCopilotChatCompletionsWithAgent",
+  GithubCopilotListModelsWithDefaultAgent:
+    "githubCopilotListModelsWithDefaultAgent",
+  GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
+
+  // GitHub Copilot device-flow sign-in (creates personal provider keys)
+  GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
+  GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
