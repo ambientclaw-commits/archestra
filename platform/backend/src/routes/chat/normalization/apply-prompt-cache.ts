@@ -14,14 +14,15 @@ const CACHE_BREAKPOINTS = {
 type CacheBreakpointConfig =
   (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS];
 
-// Claude Sonnet/Haiku/Opus 4.5 and newer support a 1-hour cache TTL; older
-// models (and other providers) only support the 5-minute default. Matches bare
-// ids ("claude-sonnet-4-5") and Bedrock inference-profile ids
-// ("us.anthropic.claude-opus-4-6-..."). Claude Sonnet/Opus 4
-// ("claude-sonnet-4-20250514") and Claude 3.x are intentionally excluded.
-// `(?!\d)` stops the minor-version digit from matching the leading digit of a
-// dated id like "claude-sonnet-4-20250514" (Sonnet 4, not 4.5).
-const ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
+// Per AWS's prompt-caching docs the 1-hour cache TTL is supported only by
+// Claude Opus 4.5, Sonnet 4.5, and Haiku 4.5. Every other model uses the
+// 5-minute default — including Opus 4.6 (documented 5-minute-only), Opus 4
+// ("claude-sonnet-4-20250514"), Claude 3.x, any newer model not yet listed,
+// and non-Anthropic providers. Matches bare ids ("claude-sonnet-4-5") and
+// Bedrock inference-profile ids ("us.anthropic.claude-sonnet-4-5-..."). `(?!\d)`
+// stops "4-5" from matching the leading digit of a dated Sonnet 4 id like
+// "claude-sonnet-4-20250514".
+const ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
 function supportsOneHourCache(model: string): boolean {
   return ONE_HOUR_CACHE_MODEL.test(model);

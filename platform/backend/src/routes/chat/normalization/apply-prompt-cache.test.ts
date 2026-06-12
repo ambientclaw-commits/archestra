@@ -207,13 +207,31 @@ describe("applyPromptCacheBreakpoints", () => {
     });
   });
 
-  it("uses a 1h TTL for a Bedrock Sonnet 4.5+ inference profile", () => {
+  it("uses a 1h TTL for a Bedrock Sonnet 4.5 inference profile", () => {
     const [result] = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      messages: [userMessage("a")],
+    });
+    expect(bedrockCachePoint(result)).toEqual({ type: "default", ttl: "1h" });
+  });
+
+  it("keeps the 5m default for Opus 4.6 (1h is a 4.5-only feature)", () => {
+    // AWS docs list the 1-hour TTL only for Opus 4.5, Sonnet 4.5, and Haiku
+    // 4.5. Opus 4.6 is documented as 5-minute-only.
+    const [bedrock] = applyPromptCacheBreakpoints({
       provider: "bedrock",
       model: "us.anthropic.claude-opus-4-6-v1:0",
       messages: [userMessage("a")],
     });
-    expect(bedrockCachePoint(result)).toEqual({ type: "default", ttl: "1h" });
+    expect(bedrockCachePoint(bedrock)).toEqual({ type: "default" });
+
+    const [anthropic] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-opus-4-6-v1",
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(anthropic)).toEqual({ type: "ephemeral" });
   });
 
   it("keeps the 5m default for older models and when model is absent", () => {
