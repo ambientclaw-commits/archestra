@@ -11,6 +11,17 @@ vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
 }));
 
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useCreateLlmProviderApiKey: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@/components/github-copilot-sign-in", () => ({
+  GithubCopilotSignIn: () => <button type="button">Sign in with GitHub</button>,
+}));
+
 import { InlineChatError } from "./inline-chat-error";
 
 describe("InlineChatError", () => {
@@ -195,5 +206,30 @@ describe("InlineChatError", () => {
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
     expect(screen.getByText("conversation-12345678")).toBeInTheDocument();
     expect(screen.getByText("Session")).toBeInTheDocument();
+  });
+
+  it("renders a connect-account card for a per-user provider auth error", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "provider_auth_required",
+              message: "Connect your GitHub Copilot account to use this model.",
+              isRetryable: false,
+              authAction: {
+                provider: "github-copilot",
+                providerLabel: "GitHub Copilot",
+              },
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(screen.getByText("Connect GitHub Copilot")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Sign in with GitHub/i }),
+    ).toBeInTheDocument();
   });
 });

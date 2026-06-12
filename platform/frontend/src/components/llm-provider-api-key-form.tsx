@@ -5,6 +5,7 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
@@ -383,6 +384,11 @@ export function LlmProviderApiKeyForm({
     );
   }, [existingKeys, provider, scope, teamId]);
 
+  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
+  // so keys are personal-only — each user connects their own account.
+  const isPerUserProvider = providerRequiresPerUserCredential(provider);
+  const perUserScopeReason = `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
+
   const visibilityOptions = useMemo(
     (): Array<
       VisibilityOption<NonNullable<CreateLlmProviderApiKeyBody["scope"]>>
@@ -398,25 +404,35 @@ export function LlmProviderApiKeyForm({
         label: "Team",
         description: "Available to members of one selected team",
         icon: Users,
-        disabled: !canReadTeams || teams.length === 0,
-        disabledReason: !canReadTeams
-          ? "Team sharing is unavailable without team:read permission"
-          : teams.length === 0
-            ? "Create a team before using team scope"
-            : undefined,
+        disabled: isPerUserProvider || !canReadTeams || teams.length === 0,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !canReadTeams
+            ? "Team sharing is unavailable without team:read permission"
+            : teams.length === 0
+              ? "Create a team before using team scope"
+              : undefined,
       },
       {
         value: "org",
         label: "Organization",
         description: "Available to everyone in the organization",
         icon: Building2,
-        disabled: !isLlmProviderApiKeyAdmin,
-        disabledReason: !isLlmProviderApiKeyAdmin
-          ? "You need llmProviderApiKey:admin permission to share org-wide"
-          : undefined,
+        disabled: isPerUserProvider || !isLlmProviderApiKeyAdmin,
+        disabledReason: isPerUserProvider
+          ? perUserScopeReason
+          : !isLlmProviderApiKeyAdmin
+            ? "You need llmProviderApiKey:admin permission to share org-wide"
+            : undefined,
       },
     ],
-    [canReadTeams, isLlmProviderApiKeyAdmin, teams.length],
+    [
+      canReadTeams,
+      isLlmProviderApiKeyAdmin,
+      teams.length,
+      isPerUserProvider,
+      perUserScopeReason,
+    ],
   );
 
   useEffect(() => {
@@ -426,6 +442,14 @@ export function LlmProviderApiKeyForm({
 
     form.setValue("isPrimary", !hasAnyKeyForProvider);
   }, [form, hasAnyKeyForProvider, isEditMode]);
+
+  // Force personal scope when the provider requires a per-user credential.
+  useEffect(() => {
+    if (isPerUserProvider && scope !== "personal") {
+      form.setValue("scope", "personal");
+      form.setValue("teamId", null);
+    }
+  }, [form, isPerUserProvider, scope]);
 
   useEffect(() => {
     if (allowedProviderSet.has(provider)) {
