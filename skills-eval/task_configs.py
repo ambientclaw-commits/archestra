@@ -198,7 +198,48 @@ _multistage_demo = TaskConfig(
     max_format_attempts=3,
 )
 
+# === list-stats ===
+# A simple single-stage sandbox task: read a staged JSON file, compute basic stats, submit. No
+# skills or verifier deps -- exercises the staged-attachment + sandbox + submit_result + verify path
+# with a task a capable model reliably passes.
+
+_list_stats = TaskConfig(
+    id="list-stats",
+    upstream_dir=_TASKS_DIR / "list-stats" / "upstream",
+    stages=(
+        StageSpec(
+            text=(
+                "A JSON file with a list of integers under the key `numbers` is available at "
+                f"`{_ATTACHMENTS}/data.json`. Use the sandbox tools to read it and compute the sum, "
+                "count, minimum, and maximum of the list. Submit your answer with "
+                '`result = {"sum": <int>, "count": <int>, "min": <int>, "max": <int>}`.\n\n' + _SUBMIT_INSTRUCTIONS
+            ),
+            files=(
+                StagedFile(
+                    upstream="environment/data.json",
+                    dest=f"{_ATTACHMENTS}/data.json",
+                    mime_type="application/json",
+                ),
+            ),
+        ),
+    ),
+    result_schema={
+        "type": "object",
+        "required": ["sum", "count", "min", "max"],
+        "properties": {key: {"type": "number"} for key in ("sum", "count", "min", "max")},
+    },
+    skills=(),
+    verifier=VerifierSpec(
+        deps=(),
+        test_file="tests/test_outputs.py",
+        data_file="environment/data.json",
+        report_env="LIST_STATS_REPORT",
+        data_env="LIST_STATS_DATA",
+    ),
+)
+
 TASKS: dict[str, TaskConfig] = {
     _bike_rebalance.id: _bike_rebalance,
     _multistage_demo.id: _multistage_demo,
+    _list_stats.id: _list_stats,
 }

@@ -106,6 +106,16 @@ def test_bike_rebalance_loads_from_vendored_assets() -> None:
     assert adapted.result_schema["required"] == ["summary", "vehicles", "stations"]
 
 
+def test_list_stats_is_single_stage_with_staged_file() -> None:
+    config = TASKS["list-stats"]
+    adapted = adapt_task(config, FsUpstream(config.upstream_dir))
+    assert len(adapted.stages) == 1
+    assert adapted.stages[0].files[0].dest == "/home/sandbox/attachments/data.json"
+    assert "submit_result" in adapted.stages[0].message
+    assert adapted.result_schema["required"] == ["sum", "count", "min", "max"]
+    assert adapted.skills == ()
+
+
 def test_multistage_demo_is_two_turns() -> None:
     config = TASKS["multistage-demo"]
     adapted = adapt_task(config, FsUpstream(config.upstream_dir))
