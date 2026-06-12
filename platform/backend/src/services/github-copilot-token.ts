@@ -243,6 +243,11 @@ function exchangeErrorResponse(error: unknown): Response {
   throw error;
 }
 
+// sha256 here derives an in-memory cache key for the bearer LRU — it is never
+// stored, persisted, or compared against a stored hash, so a slow password KDF
+// (bcrypt/scrypt/argon2) would only add latency to every proxy request. (CodeQL
+// js/insufficient-password-hash flags this pattern; dismissed as a false
+// positive — it targets password *storage*, not cache-key derivation.)
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
