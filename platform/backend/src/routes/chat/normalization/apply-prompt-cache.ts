@@ -20,8 +20,8 @@ type CacheBreakpointConfig =
 // ("claude-sonnet-4-20250514"), Claude 3.x, any newer model not yet listed,
 // and non-Anthropic providers. Matches bare ids ("claude-sonnet-4-5") and
 // Bedrock inference-profile ids ("us.anthropic.claude-sonnet-4-5-..."). `(?!\d)`
-// stops "4-5" from matching the leading digit of a dated Sonnet 4 id like
-// "claude-sonnet-4-20250514".
+// requires "4-5" to be the whole minor version (followed by "-" or end of
+// string), so a hypothetical "claude-opus-4-50" is not read as 4.5.
 const ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
 function supportsOneHourCache(model: string): boolean {
