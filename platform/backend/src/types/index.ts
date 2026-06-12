@@ -13,6 +13,7 @@ export * from "./api";
 export * from "./api-key";
 export * from "./audit-log";
 export * from "./autonomy-policies";
+export * from "./caller";
 export * from "./chat";
 export * from "./chat-active-run";
 export * from "./chatops";

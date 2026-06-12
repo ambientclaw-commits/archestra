@@ -1,14 +1,7 @@
 import { createHash } from "node:crypto";
 import {
-  type AssignedCredentialUnavailableMcpToolError,
-  type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
-  LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-  MCP_CATALOG_INSTALL_PATH,
-  MCP_CATALOG_INSTALL_QUERY_PARAM,
-  MCP_CATALOG_REAUTH_QUERY_PARAM,
-  MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
@@ -46,22 +39,29 @@ import {
   type ResolvedEnterpriseTransportCredential,
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
-import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
-import type {
-  Tool as CatalogTool,
-  CommonMcpToolDefinition,
-  CommonToolCall,
-  CommonToolResult,
-  EnterpriseManagedCredentialConfig,
-  InternalMcpCatalog,
-  MCPGatewayAuthMethod,
-  McpToolAssignment,
+import {
+  type Tool as CatalogTool,
+  type CommonMcpToolDefinition,
+  type CommonToolCall,
+  type CommonToolResult,
+  callerFromTokenAuth,
+  type EnterpriseManagedCredentialConfig,
+  type InternalMcpCatalog,
+  type MCPGatewayAuthMethod,
+  type McpToolAssignment,
 } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+import {
+  buildAssignedCredentialUnavailableMessage,
+  buildAuthRequiredMessage,
+  buildEnterpriseManagedIdentityProviderAuthMessage,
+  buildExpiredAuthMessage,
+} from "./mcp-auth-recovery";
+import { resolveConnection } from "./mcp-connection-resolver";
 import {
   configureMcpElicitation,
   type McpElicitationHandler,
@@ -410,14 +410,13 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !enterpriseTransportCredential
     ) {
-      const authError =
-        await this.buildEnterpriseManagedIdentityProviderAuthMessage(
-          catalogItem.name,
-          catalogItem.id,
-          effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
-          tokenAuth,
-          options,
-        );
+      const authError = await buildEnterpriseManagedIdentityProviderAuthMessage(
+        catalogItem.name,
+        catalogItem.id,
+        effectiveEnterpriseManagedConfig?.identityProviderId ?? null,
+        tokenAuth,
+        options,
+      );
       return this.createErrorResult(
         toolCall,
         agentId,
@@ -605,7 +604,7 @@ class McpClient {
 
         if (toolResultAuthError && tool.catalogId && targetMcpServerId) {
           const catalogDisplayName = tool.catalogName || tool.catalogId;
-          const authError = this.buildExpiredAuthMessage(
+          const authError = buildExpiredAuthMessage(
             catalogDisplayName,
             tool.catalogId,
             targetMcpServerId,
@@ -811,11 +810,10 @@ class McpClient {
               !targetServer.teamId &&
               tokenAuth?.userId !== targetServer.ownerId
             ) {
-              const assignmentError =
-                this.buildAssignedCredentialUnavailableMessage(
-                  catalogDisplayName,
-                  tool.catalogId,
-                );
+              const assignmentError = buildAssignedCredentialUnavailableMessage(
+                catalogDisplayName,
+                tool.catalogId,
+              );
               return await this.createErrorResult(
                 toolCall,
                 agentId,
@@ -825,7 +823,7 @@ class McpClient {
                 assignmentError,
               );
             }
-            const authError = this.buildExpiredAuthMessage(
+            const authError = buildExpiredAuthMessage(
               catalogDisplayName,
               tool.catalogId,
               targetMcpServerId,
@@ -841,7 +839,7 @@ class McpClient {
             );
           }
           // No server resolved → "auth required" message with install link
-          const authError = this.buildAuthRequiredMessage(
+          const authError = buildAuthRequiredMessage(
             catalogDisplayName,
             tool.catalogId,
             tokenAuth,
@@ -1322,8 +1320,10 @@ class McpClient {
     return { secrets: {}, serverState };
   }
 
-  // Determines the target MCP server ID for a local catalog item
-  // Since there are multiple deployments for a single catalog item that can receive request
+  // Determines the target MCP server (and so whose credential) for a tool
+  // call. The decision itself is the pure policy in mcp-connection-resolver.ts
+  // — this adapter only fetches the inputs, maps denial codes to the
+  // user-facing error results, and logs the outcome.
   private async determineTargetMcpServerIdForCatalogItem({
     tool,
     tokenAuth,
@@ -1341,125 +1341,52 @@ class McpClient {
     | { error: CommonToolResult }
   > {
     const fallbackName = tool.catalogName || "unknown";
-    logger.info(
-      {
-        toolName: toolCall.name,
-        tool: tool,
-        tokenAuth: tokenAuth,
-      },
-      "Determining target MCP server ID for catalog item",
-    );
-    // Static credential case: tool has a bound MCP server credential to use.
-    if (tool.credentialResolutionMode === "static") {
-      if (!tool.mcpServerId) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "An MCP server installation is required for statically assigned MCP tools.",
-            fallbackName,
-          ),
-        };
-      }
-      const mcpServer = await McpServerModel.findById(tool.mcpServerId);
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogItem: catalogItem,
-          targetMcpServerId: tool.mcpServerId,
-        },
-        "Determined target MCP server ID for catalog item",
+    const fail = (message: string, authError?: AuthRequiredMcpToolError) =>
+      this.createErrorResult(
+        toolCall,
+        agentId,
+        message,
+        fallbackName,
+        undefined,
+        authError,
+      ).then((error) => ({ error }));
+
+    // Wire-level guard: runtime resolution needs a token; pinned and
+    // enterprise modes do not.
+    const isRuntimeResolved =
+      tool.credentialResolutionMode !== "static" &&
+      tool.credentialResolutionMode !== "enterprise_managed";
+    if (isRuntimeResolved && !tokenAuth) {
+      return fail(
+        "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
       );
-      return {
-        targetMcpServerId: tool.mcpServerId,
-        mcpServerName: mcpServer?.name || fallbackName,
-      };
     }
 
-    // If mcp server is configured to use enterprise-managed credentials, we can use any pod.
-    // Mcp server pod will request credentials from the IDP.
-    if (tool.credentialResolutionMode === "enterprise_managed") {
-      const explicitTargetMcpServerId = tool.mcpServerId;
-      if (explicitTargetMcpServerId) {
-        const mcpServer = await McpServerModel.findById(
-          explicitTargetMcpServerId,
-        );
-        return {
-          targetMcpServerId: explicitTargetMcpServerId,
-          mcpServerName: mcpServer?.name || fallbackName,
-        };
-      }
+    // The candidate list is only consulted when the policy does not name a
+    // server directly (assignment pin / explicit enterprise install).
+    const needsCandidates =
+      tool.credentialResolutionMode === "static"
+        ? false
+        : !(
+            tool.credentialResolutionMode === "enterprise_managed" &&
+            tool.mcpServerId
+          );
+    const servers =
+      needsCandidates && tool.catalogId
+        ? await McpServerModel.findByCatalogId(tool.catalogId)
+        : [];
 
-      const allServers = await McpServerModel.findByCatalogId(
-        tool.catalogId ?? "",
-      );
-      const resolvedServer = allServers[0];
-      if (!resolvedServer) {
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            agentId,
-            "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
-            fallbackName,
-          ),
-        };
-      }
+    const resolution = resolveConnection({
+      credentialResolutionMode: tool.credentialResolutionMode,
+      assignedMcpServerId: tool.mcpServerId,
+      catalogId: tool.catalogId,
+      dynamicConnectionMcpServerId:
+        catalogItem.dynamicConnectionMcpServerId ?? null,
+      caller: callerFromTokenAuth(tokenAuth),
+      servers,
+    });
 
-      return {
-        targetMcpServerId: resolvedServer.id,
-        mcpServerName: resolvedServer.name,
-      };
-    }
-
-    // Dynamic credential (resolved on tool call time) case: resolve target MCP server ID based on tokenAuth
-    // tokenAuth are profile tokens autocreated when team is assigned to a profile
-    if (!tokenAuth) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
-          fallbackName,
-        ),
-      };
-    }
-    if (!tool.catalogId) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "Dynamic team credential is enabled but tool has no catalogId.",
-          fallbackName,
-        ),
-      };
-    }
-
-    // Get all servers for this catalog
-    const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
-
-    // The catalog item defines how agents connect to it. A pinned connection
-    // ("service account") routes every runtime-resolved call through that one
-    // installation, regardless of the caller. The pin is re-validated against
-    // the catalog's installs on every call (no DB-level FK — see the schema
-    // comment), so a revoked connection degrades to resolve-at-call-time.
-    if (catalogItem.dynamicConnectionMcpServerId) {
-      const pinnedServer = allServers.find(
-        (s) => s.id === catalogItem.dynamicConnectionMcpServerId,
-      );
-      if (pinnedServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: pinnedServer.id,
-          },
-          `Dynamic resolution: using the catalog's pinned service-account connection for tool ${toolCall.name}`,
-        );
-        return {
-          targetMcpServerId: pinnedServer.id,
-          mcpServerName: pinnedServer.name,
-        };
-      }
+    if (resolution.serviceAccountPinDegraded) {
       logger.warn(
         {
           toolName: toolCall.name,
@@ -1467,100 +1394,58 @@ class McpClient {
           dynamicConnectionMcpServerId:
             catalogItem.dynamicConnectionMcpServerId,
         },
-        "Dynamic resolution: the catalog's pinned connection no longer exists; resolving at call time",
+        "Connection resolution: the catalog's pinned connection no longer exists; resolving on behalf of the caller",
       );
     }
 
-    // Resolve at call time: strictly the caller's own connection — a user
-    // token uses that user's install, nothing else. No team or org fallback;
-    // sharing a connection is an explicit choice (the pin above).
-    if (tokenAuth.userId) {
-      const userServer = allServers.find(
-        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
-      );
-      if (userServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: userServer.id,
-            userId: tokenAuth.userId,
-          },
-          `Dynamic resolution: using user-owned server for tool ${toolCall.name}`,
-        );
-        return {
-          targetMcpServerId: userServer.id,
-          mcpServerName: userServer.name,
-        };
-      }
-    }
-
-    // Team token: the token's own team installation is its identity.
-    if (tokenAuth.teamId) {
-      const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
-      if (teamServer) {
-        logger.info(
-          {
-            toolName: toolCall.name,
-            catalogId: tool.catalogId,
-            serverId: teamServer.id,
-            teamId: tokenAuth.teamId,
-          },
-          `Dynamic resolution: using team-owned server for team ${tokenAuth.teamId}`,
-        );
-        return {
-          targetMcpServerId: teamServer.id,
-          mcpServerName: teamServer.name,
-        };
-      }
-    }
-
-    // Org-wide token is incompatible with dynamic credential resolution
-    if (tokenAuth.isOrganizationToken) {
-      return {
-        error: await this.createErrorResult(
-          toolCall,
-          agentId,
-          "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
-          fallbackName,
-        ),
-      };
-    }
-
-    // Fallback for external IdP users if earlier resolution didn't match
-    // TODO: works only we are doing end-to-end JWKS pattern.
-    if (tokenAuth.isExternalIdp && allServers.length > 0) {
+    if (resolution.status === "resolved") {
+      const serverName =
+        resolution.serverName ??
+        (await McpServerModel.findById(resolution.serverId))?.name ??
+        null;
       logger.info(
         {
           toolName: toolCall.name,
           catalogId: tool.catalogId,
-          serverId: allServers[0].id,
+          serverId: resolution.serverId,
+          via: resolution.via,
         },
-        `Dynamic resolution: using first available server for external IdP user`,
+        `Connection resolution: resolved MCP server for tool ${toolCall.name} via ${resolution.via}`,
       );
       return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
+        targetMcpServerId: resolution.serverId,
+        mcpServerName: serverName || fallbackName,
       };
     }
 
-    // No server found - return an actionable error with install link
-    const catalogDisplayName = tool.catalogName || tool.catalogId;
-    const authError = this.buildAuthRequiredMessage(
-      catalogDisplayName,
-      tool.catalogId,
-      tokenAuth,
-    );
-    return {
-      error: await this.createErrorResult(
-        toolCall,
-        agentId,
-        authError.message,
-        fallbackName,
-        undefined,
-        authError,
-      ),
-    };
+    switch (resolution.reason) {
+      case "static_assignment_missing_server":
+        return fail(
+          "An MCP server installation is required for statically assigned MCP tools.",
+        );
+      case "enterprise_no_installation":
+        return fail(
+          "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
+        );
+      case "missing_catalog_id":
+        return fail(
+          "Dynamic team credential is enabled but tool has no catalogId.",
+        );
+      case "org_token_unsupported":
+        return fail(
+          "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
+        );
+      case "auth_required": {
+        // No usable connection for this caller — actionable connect prompt.
+        const catalogId = tool.catalogId ?? "";
+        const authError = buildAuthRequiredMessage(
+          tool.catalogName || catalogId,
+          catalogId,
+          tokenAuth,
+        );
+        return fail(authError.message, authError);
+      }
+    }
   }
 
   /**
@@ -2187,7 +2072,7 @@ class McpClient {
 
       if (isRetryAuthError && toolCatalogId) {
         const catalogDisplayName = toolCatalogName || toolCatalogId;
-        const authError = this.buildExpiredAuthMessage(
+        const authError = buildExpiredAuthMessage(
           catalogDisplayName,
           toolCatalogId,
           targetMcpServerId,
@@ -2276,163 +2161,6 @@ class McpClient {
 
     this.oauthRefreshLocks.set(secretId, refreshPromise);
     return refreshPromise;
-  }
-
-  /**
-   * Build an actionable authentication error message with a link to the MCP registry
-   * for the user to set up credentials.
-   */
-  private buildAuthRequiredMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-    tokenAuth?: TokenAuthContext,
-  ): AuthRequiredMcpToolError {
-    const context = this.formatAuthContext(tokenAuth);
-    const installUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${catalogId}`;
-    return {
-      type: "auth_required",
-      message: formatActionableAuthError({
-        title: `Authentication required for "${catalogDisplayName}"`,
-        detail: `No credentials were found for your account (${context}).`,
-        actionLabel: "set up your credentials",
-        url: installUrl,
-        postAction:
-          "Once you have completed authentication, retry this tool call.",
-      }),
-      catalogId,
-      catalogName: catalogDisplayName,
-      action: "install_mcp_credentials",
-      actionUrl: installUrl,
-    };
-  }
-
-  /**
-   * Build an actionable error message for expired or invalid credentials,
-   * with a deep link to the re-authentication dialog.
-   */
-  private buildExpiredAuthMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-    mcpServerId: string,
-    tokenAuth?: TokenAuthContext,
-    detailOverride?: string,
-  ): AuthExpiredMcpToolError {
-    const context = this.formatAuthContext(tokenAuth);
-    const reauthUrl = `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${mcpServerId}`;
-    return {
-      type: "auth_expired",
-      message: formatActionableAuthError({
-        title: `Expired or invalid authentication for "${catalogDisplayName}"`,
-        detail:
-          detailOverride ??
-          `Your credentials (${context}) failed authentication. Please re-authenticate to continue using this tool.`,
-        actionLabel: "re-authenticate",
-        url: reauthUrl,
-        postAction: "Once you have re-authenticated, retry this tool call.",
-      }),
-      catalogId,
-      catalogName: catalogDisplayName,
-      serverId: mcpServerId,
-      reauthUrl,
-    };
-  }
-
-  private buildAssignedCredentialUnavailableMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-  ): AssignedCredentialUnavailableMcpToolError {
-    return {
-      type: "assigned_credential_unavailable",
-      message: [
-        `Expired / Invalid Authentication: credentials for "${catalogDisplayName}" have expired or are invalid.`,
-        "Re-authenticate to continue using this tool.",
-        "Ask the agent owner or an admin to re-authenticate.",
-      ].join("\n"),
-      catalogId,
-      catalogName: catalogDisplayName,
-    };
-  }
-
-  private async buildEnterpriseManagedIdentityProviderAuthMessage(
-    catalogDisplayName: string,
-    catalogId: string,
-    identityProviderId: string | null,
-    tokenAuth?: TokenAuthContext,
-    options?: {
-      conversationId?: string;
-      identityProviderRedirectPath?: string;
-    },
-  ): Promise<AuthRequiredMcpToolError> {
-    const identityProvider = identityProviderId
-      ? await findExternalIdentityProviderById(identityProviderId)
-      : null;
-    if (!identityProvider) {
-      return this.buildAuthRequiredMessage(
-        catalogDisplayName,
-        catalogId,
-        tokenAuth,
-      );
-    }
-
-    const connectUrl = this.buildIdentityProviderConnectUrl(
-      identityProvider.providerId,
-      options,
-    );
-    return {
-      type: "auth_required",
-      message: formatActionableAuthError({
-        title: `Authentication required for "${catalogDisplayName}"`,
-        detail: `This tool needs a current ${identityProvider.providerId} session for your account before this deployment can request the downstream credential.`,
-        actionLabel: `connect ${identityProvider.providerId}`,
-        url: connectUrl,
-        postAction:
-          "Once you have completed authentication, retry this tool call.",
-      }),
-      catalogId,
-      catalogName: catalogDisplayName,
-      action: "connect_identity_provider",
-      actionUrl: connectUrl,
-      providerId: identityProvider.providerId,
-    };
-  }
-
-  private buildIdentityProviderConnectUrl(
-    providerId: string,
-    options?: {
-      conversationId?: string;
-      identityProviderRedirectPath?: string;
-    },
-  ): string {
-    const redirectTo = this.getIdentityProviderRedirectPath(options);
-    const searchParams = new URLSearchParams({
-      redirectTo,
-      mode: LINKED_IDP_SSO_MODE,
-    });
-    return `${config.frontendBaseUrl}/auth/sso/${encodeURIComponent(providerId)}?${searchParams.toString()}`;
-  }
-
-  private getIdentityProviderRedirectPath(options?: {
-    conversationId?: string;
-    identityProviderRedirectPath?: string;
-  }): string {
-    if (
-      options?.identityProviderRedirectPath?.startsWith("/") &&
-      !options.identityProviderRedirectPath.startsWith("//")
-    ) {
-      return options.identityProviderRedirectPath;
-    }
-
-    if (options?.conversationId) {
-      return `/chat/${options.conversationId}`;
-    }
-
-    return "/chat";
-  }
-
-  private formatAuthContext(tokenAuth?: TokenAuthContext): string {
-    if (tokenAuth?.userId) return `user: ${tokenAuth.userId}`;
-    if (tokenAuth?.teamId) return `team: ${tokenAuth.teamId}`;
-    return "organization";
   }
 
   /**
@@ -3436,30 +3164,6 @@ process.on("SIGTERM", () => {
   mcpClient.disconnectAll().catch(logger.error);
   process.exit(0);
 });
-
-/**
- * Format an actionable auth error message that strongly encourages the LLM
- * to display the URL to the user. The wording is intentionally directive
- * so that models reliably surface the link rather than paraphrasing it away.
- */
-function formatActionableAuthError(params: {
-  title: string;
-  detail: string;
-  actionLabel: string;
-  url: string;
-  postAction: string;
-}): string {
-  return [
-    `${params.title}.`,
-    "",
-    params.detail,
-    `To ${params.actionLabel}, visit this URL: ${params.url}`,
-    "",
-    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
-    "",
-    params.postAction,
-  ].join("\n");
-}
 
 /** Merge passthrough headers into target, skipping keys already present (case-insensitive). */
 function mergePassthroughHeaders(
