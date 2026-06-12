@@ -303,6 +303,26 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(apiKey.scope).toBe("org");
   });
 
+  test("rejects non-personal scope for per-user providers (github-copilot)", async () => {
+    for (const scope of ["org", "team"] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: `Shared Copilot ${scope}`,
+          provider: "github-copilot",
+          apiKey: "gho_shared_token",
+          scope,
+          ...(scope === "team"
+            ? { teamId: "00000000-0000-0000-0000-000000000000" }
+            : {}),
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("per-user");
+    }
+  });
+
   test("should get a specific LLM provider API key by ID", async () => {
     const createResponse = await app.inject({
       method: "POST",

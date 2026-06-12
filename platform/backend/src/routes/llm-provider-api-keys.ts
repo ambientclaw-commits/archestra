@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -270,6 +271,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: body.teamId,
         userId: user.id,
         organizationId,
+        provider: body.provider,
         headers,
       });
 
@@ -603,6 +605,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamId: newTeamId,
           userId: user.id,
           organizationId,
+          provider: apiKeyFromDB.provider,
           headers,
         });
       }
@@ -913,9 +916,20 @@ async function validateScopeAndAuthorization(params: {
   teamId: string | null | undefined;
   userId: string;
   organizationId: string;
+  provider: SupportedProvider;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, organizationId, headers } = params;
+  const { scope, teamId, userId, organizationId, provider, headers } = params;
+
+  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
+  // so team/org scope would share one person's credential with everyone. Only
+  // personal keys are allowed; each user links their own account.
+  if (providerRequiresPerUserCredential(provider) && scope !== "personal") {
+    throw new ApiError(
+      400,
+      `${provider} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+    );
+  }
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
