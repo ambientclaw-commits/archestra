@@ -449,6 +449,20 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
+  // OAuth client credentials are a service-to-service credential with no acting
+  // user. Per-user providers (GitHub Copilot) are an individual's token, so
+  // they can never be served this way — there's no user to attribute, and the
+  // mapped key would be one person's token for every caller.
+  if (
+    isSupportedProvider(params.expectedProvider) &&
+    providerRequiresPerUserCredential(params.expectedProvider)
+  ) {
+    throw new ApiError(
+      400,
+      `${params.expectedProvider} is per-user and cannot be used via OAuth client credentials; each user must connect their own account.`,
+    );
+  }
+
   const providerApiKey = await LlmProviderApiKeyModel.findById(
     mappedProviderKey.providerApiKeyId,
   );
