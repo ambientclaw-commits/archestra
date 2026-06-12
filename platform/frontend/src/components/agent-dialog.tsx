@@ -65,7 +65,6 @@ import {
 } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -105,6 +104,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -655,6 +655,7 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
+  const [accessAllTools, setAccessAllTools] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
@@ -719,6 +720,7 @@ export function AgentDialog({
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
         setToolExposureMode(agentData.toolExposureMode ?? "full");
+        setAccessAllTools(agentData.accessAllTools ?? false);
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
           agentData.builtInAgentConfig?.name ===
@@ -751,7 +753,13 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        setToolExposureMode("full");
+        // New internal agents default to dynamic access — all tools and
+        // knowledge through search_tools/run_tool. Gateways and proxies are
+        // deliberately-configured surfaces and stay assigned-tools-only.
+        setToolExposureMode(
+          agentType === "agent" ? "search_and_run_only" : "full",
+        );
+        setAccessAllTools(agentType === "agent");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
       }
@@ -759,7 +767,7 @@ export function AgentDialog({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [open, agent, freshAgent, refetchAgent]);
+  }, [open, agent, freshAgent, refetchAgent, agentType]);
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping
@@ -961,6 +969,7 @@ export function AgentDialog({
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
               toolExposureMode,
+              accessAllTools,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -998,6 +1007,7 @@ export function AgentDialog({
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
             toolExposureMode,
+            accessAllTools,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1099,6 +1109,7 @@ export function AgentDialog({
     passthroughHeaders,
     deleteAgent,
     toolExposureMode,
+    accessAllTools,
   ]);
 
   const handleClose = useCallback(() => {
@@ -1461,26 +1472,269 @@ export function AgentDialog({
                 >
                   <h3 className="text-sm font-semibold">Capabilities</h3>
 
-                  {/* Tools */}
+                  {/* Tools & knowledge */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label>Tools ({selectedToolsCount})</Label>
-                    </div>
-                    {!agent && selectedToolsCount > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Some recommended {appName} MCP tools are pre-selected
-                        for you
-                      </p>
+                    <Label>Tools & Knowledge Sources</Label>
+                    <Tabs
+                      value={accessAllTools ? "all" : "specific"}
+                      onValueChange={(value) => {
+                        const all = value === "all";
+                        setAccessAllTools(all);
+                        // Dynamic access only works through the search/run
+                        // dispatch surface, so picking it enables that mode.
+                        if (all) {
+                          setToolExposureMode("search_and_run_only");
+                        }
+                      }}
+                    >
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="specific">Custom</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    {accessAllTools && (
+                      <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          Every MCP tool and knowledge source the chatting user
+                          can access
+                        </li>
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          Used with the user's own credentials, resolved at call
+                          time
+                        </li>
+                        <li className="flex gap-2">
+                          <CheckIcon className="mt-px size-3.5 shrink-0" />
+                          <span>
+                            Discovered on demand — the catalog never burns
+                            context tokens.{" "}
+                            <ExternalDocsLink
+                              href={toolExposureDocsUrl}
+                              className="underline"
+                              showIcon={false}
+                            >
+                              Learn more
+                            </ExternalDocsLink>
+                          </span>
+                        </li>
+                      </ul>
                     )}
-                    <AgentToolsEditor
-                      ref={agentToolsEditorRef}
-                      agentId={agent?.id}
-                      assignmentScope={scope}
-                      assignmentTeamIds={assignedTeamIds}
-                      onSelectedCountChange={setSelectedToolsCount}
-                      openComboboxOnMount={openToolsCombobox}
-                    />
+                    {/* Kept mounted while hidden so pending selections and the
+                        save-time ref survive switching to "All". */}
+                    <div
+                      className={cn("space-y-3", accessAllTools && "hidden")}
+                    >
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Tools ({selectedToolsCount})
+                        </p>
+                        {!agent && selectedToolsCount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Some recommended {appName} MCP tools are
+                            pre-selected for you
+                          </p>
+                        )}
+                        <AgentToolsEditor
+                          ref={agentToolsEditorRef}
+                          agentId={agent?.id}
+                          assignmentScope={scope}
+                          assignmentTeamIds={assignedTeamIds}
+                          onSelectedCountChange={setSelectedToolsCount}
+                          openComboboxOnMount={openToolsCombobox}
+                        />
+                      </div>
+                      {(knowledgeBases.length > 0 || connectors.length > 0) && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Knowledge Sources
+                          </p>
+                          <Popover modal>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-between font-normal"
+                              >
+                                {(() => {
+                                  const totalSelected =
+                                    knowledgeBaseIds.length +
+                                    connectorIds.length;
+                                  return totalSelected === 0
+                                    ? "Select connectors or knowledge bases"
+                                    : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                                })()}
+                                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-96 p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search knowledge sources..." />
+                                <CommandList>
+                                  <CommandEmpty>
+                                    No knowledge sources found.
+                                  </CommandEmpty>
+                                  {knowledgeBases.length > 0 && (
+                                    <CommandGroup heading="Knowledge Bases">
+                                      {knowledgeBases.map((kb) => {
+                                        const isSelected =
+                                          knowledgeBaseIds.includes(kb.id);
+                                        const connectorTypes = [
+                                          ...new Set<string>(
+                                            kb.connectors?.map(
+                                              (c) => c.connectorType,
+                                            ) ?? [],
+                                          ),
+                                        ];
+                                        return (
+                                          <CommandItem
+                                            key={kb.id}
+                                            value={kb.name}
+                                            className="data-[selected=true]:bg-transparent"
+                                            onSelect={() => {
+                                              setKnowledgeBaseIds((prev) =>
+                                                isSelected
+                                                  ? prev.filter(
+                                                      (id) => id !== kb.id,
+                                                    )
+                                                  : [...prev, kb.id],
+                                              );
+                                            }}
+                                          >
+                                            <CheckIcon
+                                              className={cn(
+                                                "mr-2 h-4 w-4 shrink-0",
+                                                isSelected
+                                                  ? "opacity-100"
+                                                  : "opacity-0",
+                                              )}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate text-sm">
+                                                {kb.name}
+                                              </div>
+                                              {kb.description && (
+                                                <div className="truncate text-xs text-muted-foreground">
+                                                  {kb.description}
+                                                </div>
+                                              )}
+                                            </div>
+                                            {connectorTypes.length > 0 && (
+                                              <OverlappedIcons
+                                                icons={connectorTypes.map(
+                                                  (type: string) => ({
+                                                    key: type,
+                                                    icon: (
+                                                      <ConnectorTypeIcon
+                                                        type={type}
+                                                        className="h-full w-full"
+                                                      />
+                                                    ),
+                                                    tooltip: type,
+                                                  }),
+                                                )}
+                                                maxVisible={3}
+                                                size="sm"
+                                                className="ml-2"
+                                              />
+                                            )}
+                                          </CommandItem>
+                                        );
+                                      })}
+                                    </CommandGroup>
+                                  )}
+                                  {connectors.length > 0 && (
+                                    <CommandGroup heading="Connectors">
+                                      {connectors.map((connector) => {
+                                        const isSelected =
+                                          connectorIds.includes(connector.id);
+                                        return (
+                                          <CommandItem
+                                            key={connector.id}
+                                            value={connector.name}
+                                            className="data-[selected=true]:bg-transparent"
+                                            onSelect={() => {
+                                              setConnectorIds((prev) =>
+                                                isSelected
+                                                  ? prev.filter(
+                                                      (id) =>
+                                                        id !== connector.id,
+                                                    )
+                                                  : [...prev, connector.id],
+                                              );
+                                            }}
+                                          >
+                                            <CheckIcon
+                                              className={cn(
+                                                "mr-2 h-4 w-4 shrink-0",
+                                                isSelected
+                                                  ? "opacity-100"
+                                                  : "opacity-0",
+                                              )}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="truncate text-sm">
+                                                {connector.name}
+                                              </div>
+                                              <div className="truncate text-xs text-muted-foreground">
+                                                {connector.description || (
+                                                  <span className="capitalize">
+                                                    {connector.connectorType}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="ml-2 shrink-0">
+                                              <ConnectorTypeIcon
+                                                type={connector.connectorType}
+                                                className="h-4 w-4"
+                                              />
+                                            </div>
+                                          </CommandItem>
+                                        );
+                                      })}
+                                    </CommandGroup>
+                                  )}
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Progressive loading is only a choice for custom tools —
+                      "All" requires the search/run dispatch surface. */}
+                  {!accessAllTools && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="load-tools-when-needed">
+                          Load tools progressively when needed
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Exposes <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code>{" "}
+                          and <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> instead of
+                          the full list.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
+                      </div>
+                      <Switch
+                        id="load-tools-when-needed"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                      />
+                    </div>
+                  )}
 
                   {/* Subagents */}
                   <div className="space-y-2">
@@ -1494,205 +1748,6 @@ export function AgentDialog({
                       currentAgentId={agent?.id}
                     />
                   </div>
-
-                  <div className="rounded-md border p-3 space-y-2">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="load-tools-when-needed"
-                        checked={toolExposureMode === "search_and_run_only"}
-                        onCheckedChange={(checked) =>
-                          setToolExposureMode(
-                            checked ? "search_and_run_only" : "full",
-                          )
-                        }
-                        className="mt-0.5"
-                      />
-                      <div className="space-y-1">
-                        <Label
-                          htmlFor="load-tools-when-needed"
-                          className="font-medium"
-                        >
-                          Load tools when needed
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Keep the initial tool list small. Assigned tools can
-                          still be found with{" "}
-                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and run
-                          with <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.{" "}
-                          <ExternalDocsLink
-                            href={toolExposureDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Knowledge Sources */}
-                  {(knowledgeBases.length > 0 || connectors.length > 0) && (
-                    <div className="space-y-2">
-                      <Label>Knowledge Sources</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Choose which knowledge this{" "}
-                        {(agentTypeDisplayName[agentType] || "agent").replace(
-                          /^./,
-                          (c) => c.toUpperCase(),
-                        )}{" "}
-                        can draw from when responding
-                      </p>
-                      <Popover modal>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-between font-normal"
-                          >
-                            {(() => {
-                              const totalSelected =
-                                knowledgeBaseIds.length + connectorIds.length;
-                              return totalSelected === 0
-                                ? "Select connectors or knowledge bases"
-                                : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
-                            })()}
-                            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-96 p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search knowledge sources..." />
-                            <CommandList>
-                              <CommandEmpty>
-                                No knowledge sources found.
-                              </CommandEmpty>
-                              {knowledgeBases.length > 0 && (
-                                <CommandGroup heading="Knowledge Bases">
-                                  {knowledgeBases.map((kb) => {
-                                    const isSelected =
-                                      knowledgeBaseIds.includes(kb.id);
-                                    const connectorTypes = [
-                                      ...new Set<string>(
-                                        kb.connectors?.map(
-                                          (c) => c.connectorType,
-                                        ) ?? [],
-                                      ),
-                                    ];
-                                    return (
-                                      <CommandItem
-                                        key={kb.id}
-                                        value={kb.name}
-                                        className="data-[selected=true]:bg-transparent"
-                                        onSelect={() => {
-                                          setKnowledgeBaseIds((prev) =>
-                                            isSelected
-                                              ? prev.filter(
-                                                  (id) => id !== kb.id,
-                                                )
-                                              : [...prev, kb.id],
-                                          );
-                                        }}
-                                      >
-                                        <CheckIcon
-                                          className={cn(
-                                            "mr-2 h-4 w-4 shrink-0",
-                                            isSelected
-                                              ? "opacity-100"
-                                              : "opacity-0",
-                                          )}
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="truncate text-sm">
-                                            {kb.name}
-                                          </div>
-                                          {kb.description && (
-                                            <div className="truncate text-xs text-muted-foreground">
-                                              {kb.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {connectorTypes.length > 0 && (
-                                          <OverlappedIcons
-                                            icons={connectorTypes.map(
-                                              (type: string) => ({
-                                                key: type,
-                                                icon: (
-                                                  <ConnectorTypeIcon
-                                                    type={type}
-                                                    className="h-full w-full"
-                                                  />
-                                                ),
-                                                tooltip: type,
-                                              }),
-                                            )}
-                                            maxVisible={3}
-                                            size="sm"
-                                            className="ml-2"
-                                          />
-                                        )}
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                              {connectors.length > 0 && (
-                                <CommandGroup heading="Connectors">
-                                  {connectors.map((connector) => {
-                                    const isSelected = connectorIds.includes(
-                                      connector.id,
-                                    );
-                                    return (
-                                      <CommandItem
-                                        key={connector.id}
-                                        value={connector.name}
-                                        className="data-[selected=true]:bg-transparent"
-                                        onSelect={() => {
-                                          setConnectorIds((prev) =>
-                                            isSelected
-                                              ? prev.filter(
-                                                  (id) => id !== connector.id,
-                                                )
-                                              : [...prev, connector.id],
-                                          );
-                                        }}
-                                      >
-                                        <CheckIcon
-                                          className={cn(
-                                            "mr-2 h-4 w-4 shrink-0",
-                                            isSelected
-                                              ? "opacity-100"
-                                              : "opacity-0",
-                                          )}
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="truncate text-sm">
-                                            {connector.name}
-                                          </div>
-                                          <div className="truncate text-xs text-muted-foreground">
-                                            {connector.description || (
-                                              <span className="capitalize">
-                                                {connector.connectorType}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="ml-2 shrink-0">
-                                          <ConnectorTypeIcon
-                                            type={connector.connectorType}
-                                            className="h-4 w-4"
-                                          />
-                                        </div>
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  )}
                 </div>
               )}
 

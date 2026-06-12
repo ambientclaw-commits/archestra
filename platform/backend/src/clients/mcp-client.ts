@@ -49,6 +49,7 @@ import {
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
 import type {
+  Tool as CatalogTool,
   CommonMcpToolDefinition,
   CommonToolCall,
   CommonToolResult,
@@ -338,6 +339,14 @@ class McpClient {
       conversationId?: string;
       identityProviderRedirectPath?: string;
       elicitationHandler?: McpElicitationHandler;
+      /**
+       * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
+       * execute a tool that is not assigned to the agent, with call-time
+       * ("dynamic") credential resolution. Authorization happens at the
+       * dispatch layer (archestra-mcp-server/dynamic-tools.ts) before this is
+       * set — the gateway path never sets it.
+       */
+      dynamicTool?: CatalogTool;
     },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
@@ -350,7 +359,11 @@ class McpClient {
         : undefined;
 
     // Validate and get tool metadata
-    const validationResult = await this.validateAndGetTool(toolCall, agentId);
+    const validationResult = await this.validateAndGetTool(
+      toolCall,
+      agentId,
+      options?.dynamicTool,
+    );
     if ("error" in validationResult) {
       return validationResult.error;
     }
@@ -1134,6 +1147,7 @@ class McpClient {
   private async validateAndGetTool(
     toolCall: CommonToolCall,
     agentId: string,
+    dynamicTool?: CatalogTool,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1166,7 +1180,23 @@ class McpClient {
       }
     }
 
-    const tool = mcpTools[0];
+    let tool: McpToolAssignment | undefined = mcpTools[0];
+
+    // Dynamic tool access: the dispatcher pre-resolved an unassigned tool the
+    // user can access. Shape it like an assignment with call-time ("dynamic")
+    // credential resolution — the same mode a resolve-at-call-time assignment
+    // would have — so the downstream server/credential resolution is identical.
+    // An assigned row keeps precedence so per-agent credential pinning wins.
+    if (!tool && dynamicTool && dynamicTool.name === toolCall.name) {
+      tool = {
+        toolName: dynamicTool.name,
+        mcpServerId: null,
+        credentialResolutionMode: "dynamic",
+        catalogId: dynamicTool.catalogId,
+        catalogName: null,
+        meta: dynamicTool.meta ?? null,
+      };
+    }
 
     if (!tool) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);

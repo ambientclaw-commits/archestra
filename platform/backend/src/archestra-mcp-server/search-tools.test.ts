@@ -138,7 +138,7 @@ describe("search_tools", () => {
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
-  test("includes unassigned tools from catalogs the user can access", async ({
+  test("includes unassigned tools from catalogs the user can access when the agent allows dynamic access", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMember,
@@ -152,6 +152,7 @@ describe("search_tools", () => {
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
+      accessAllTools: true,
     });
 
     const catalog = await makeInternalMcpCatalog({
@@ -186,7 +187,55 @@ describe("search_tools", () => {
     );
   });
 
-  test("hides unassigned tools when the org disables tool auto-assignment", async ({
+  test("hides unassigned tools when the agent's access-all-tools setting is off", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // default accessAllTools=false — discovery stays assigned-tools-only
+    const agent = await makeAgent({
+      name: "Search Agent",
+      organizationId: org.id,
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "GitHub MCP",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      description: "Search repositories by topic, language, or owner.",
+      catalogId: catalog.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "repository search" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.tools.map((tool) => tool.toolName)).not.toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("hides unassigned tools when the org disables dynamic tool access", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMember,
@@ -200,6 +249,7 @@ describe("search_tools", () => {
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
+      accessAllTools: true,
     });
 
     const catalog = await makeInternalMcpCatalog({
@@ -251,6 +301,7 @@ describe("search_tools", () => {
     const agent = await makeAgent({
       name: "Search Agent",
       organizationId: org.id,
+      accessAllTools: true,
     });
 
     // user creates the team but is not a member of it
@@ -415,8 +466,8 @@ describe("search_tools", () => {
   });
 
   // Sandbox built-ins surface in search only while UNassigned (so the model can
-  // discover then auto-assign them), and only for callers who can actually run
-  // them. Seeded but not assigned here to exercise that path.
+  // discover and run them dynamically), and only for callers who can actually
+  // run them. Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
       context: ArchestraContext,
@@ -448,6 +499,7 @@ describe("search_tools", () => {
         const agent = await makeAgent({
           name: "Sandbox Discovery Agent",
           organizationId: org.id,
+          accessAllTools: true,
         });
         // seed (run_command exists in the org-accessible Archestra catalog) but
         // do NOT assign it
@@ -489,6 +541,7 @@ describe("search_tools", () => {
         const agent = await makeAgent({
           name: "Sandbox Discovery Agent",
           organizationId: org.id,
+          accessAllTools: true,
         });
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
@@ -506,7 +559,7 @@ describe("search_tools", () => {
       }
     });
 
-    test("hides sandbox tools when the org disables tool auto-assignment", async ({
+    test("hides sandbox tools when the org disables dynamic tool access", async ({
       makeAgent,
       makeMember,
       makeOrganization,
@@ -522,6 +575,7 @@ describe("search_tools", () => {
         const agent = await makeAgent({
           name: "Sandbox Discovery Agent",
           organizationId: org.id,
+          accessAllTools: true,
         });
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
         await OrganizationModel.patch(org.id, {
@@ -540,6 +594,68 @@ describe("search_tools", () => {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
       }
+    });
+  });
+
+  describe("knowledge-source discovery", () => {
+    test("surfaces query_knowledge_sources only when the user can access a connector", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const { KnowledgeBaseConnectorModel } = await import("@/models");
+      const {
+        getArchestraToolFullName,
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      } = await import("@archestra/shared");
+      const kbToolName = getArchestraToolFullName(
+        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+      );
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Knowledge Discovery Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const search = async () => {
+        const result = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "query knowledge sources search", limit: 20 },
+          context,
+        );
+        expect(result.isError).toBe(false);
+        return (
+          result.structuredContent as SearchToolsStructuredContent
+        ).tools.map((tool) => tool.toolName);
+      };
+
+      // agent has no knowledge sources and the user has no connector yet
+      expect(await search()).not.toContain(kbToolName);
+
+      await KnowledgeBaseConnectorModel.create({
+        organizationId: org.id,
+        name: "Search Discovery Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "PROJ",
+        },
+      });
+
+      expect(await search()).toContain(kbToolName);
     });
   });
 

@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "access_all_tools" boolean DEFAULT false NOT NULL;

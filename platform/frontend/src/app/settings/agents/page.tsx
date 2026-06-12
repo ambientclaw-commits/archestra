@@ -369,8 +369,8 @@ export default function AgentSettingsPage() {
         }
       />
       <SettingsBlock
-        title="Tool Auto-Assignment"
-        description="Let agents discover catalog tools beyond their assigned set and assign them on first use, when the user has access to the tool's catalog and can modify the agent."
+        title="Dynamic Tool Access"
+        description="Let agents with the 'Access all tools' setting discover and run any tool the chatting user can access (MCP catalog tools and knowledge sources), resolved with the user's credentials at call time. Nothing is assigned to the agent."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
@@ -399,8 +399,7 @@ export default function AgentSettingsPage() {
           toolAutoAssignment === "disabled" ? (
             <span className="text-muted-foreground">
               Tool search and execution are limited to tools explicitly assigned
-              to each agent; skills referencing other tools will ask an admin to
-              assign them.
+              to each agent, regardless of any per-agent setting.
             </span>
           ) : undefined
         }
