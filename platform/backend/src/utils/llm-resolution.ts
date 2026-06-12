@@ -385,7 +385,12 @@ function resolveDefaultLlmFromEnv(): {
   provider: SupportedProvider;
 } {
   for (const provider of SupportedProvidersSchema.options) {
-    if (getProviderEnvApiKey(provider)) {
+    // Skip per-user providers: their env token is shared and must not back a
+    // system default (it would also resolve to no usable key downstream).
+    if (
+      getProviderEnvApiKey(provider) &&
+      !providerRequiresPerUserCredential(provider)
+    ) {
       return { model: DEFAULT_MODELS[provider], provider };
     }
   }
