@@ -37,7 +37,7 @@ export function SidebarUserMenu() {
         <Button
           variant="ghost"
           size="lg"
-          className="w-full justify-between bg-transparent p-2 has-[>svg]:px-2 hover:bg-transparent text-foreground focus-visible:border-transparent focus-visible:ring-sidebar-ring focus-visible:ring-2"
+          className="h-auto w-full justify-between bg-transparent p-2 has-[>svg]:px-2 hover:bg-transparent text-foreground focus-visible:border-transparent focus-visible:ring-sidebar-ring focus-visible:ring-2"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Avatar className="size-8 rounded-full">
