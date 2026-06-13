@@ -127,7 +127,7 @@ export function GithubCopilotSignIn({
     return (
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Check className="h-4 w-4 text-green-500" />
-        GitHub account linked — the token has been filled in above.
+        GitHub account linked — you can save the key now.
       </p>
     );
   }
