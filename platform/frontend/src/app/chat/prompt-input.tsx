@@ -121,6 +121,7 @@ const PromptInputContent = ({
   modelSource,
   onResetModelOverride,
   agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
 }) => {
@@ -609,6 +610,7 @@ const PromptInputContent = ({
             modelSource={modelSource}
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            agentModelDisplayName={agentModelDisplayName}
             textareaRef={textareaRef}
           />
           <div className="flex items-center gap-2">
@@ -663,6 +665,7 @@ const ArchestraPromptInput = ({
   modelSource,
   onResetModelOverride,
   agentRequiresPerUserConnect,
+  agentModelDisplayName,
 }: ArchestraPromptInputProps) => {
   const handleProviderFileError = useCallback(
     (err: {
@@ -716,6 +719,7 @@ const ArchestraPromptInput = ({
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          agentModelDisplayName={agentModelDisplayName}
         />
       </PromptInputProvider>
     </div>

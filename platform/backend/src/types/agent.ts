@@ -222,6 +222,13 @@ export const SelectAgentSchema = createSelectSchema(
    */
   resolvedLlmProvider: SupportedProvidersSchema.nullable().optional(),
   /**
+   * The human-facing name of the agent's configured model (e.g. "gpt-4"),
+   * resolved server-side from `modelId` so a viewer who can't access the
+   * configured key still sees the model name rather than its UUID. Null when no
+   * model is configured.
+   */
+  resolvedLlmModelName: z.string().nullable().optional(),
+  /**
    * Whether the agent's configured provider requires a per-user credential
    * (e.g. GitHub Copilot). Lets the chat/dialog show a read-only model and
    * prompt the viewer to connect their own account instead of silently

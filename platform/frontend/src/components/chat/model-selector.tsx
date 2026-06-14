@@ -105,6 +105,12 @@ interface ModelSelectorProps {
    * than silently substituting a different provider's model.
    */
   suppressAutoSelect?: boolean;
+  /**
+   * Display name to show when `selectedModel` isn't in the viewer's available
+   * models (e.g. a per-user model they can't access). Without it the trigger
+   * would fall back to the raw model UUID.
+   */
+  fallbackModelName?: string;
 }
 
 /** Map our provider names to logo provider names
@@ -532,6 +538,7 @@ export const ModelSelector = memo(function ModelSelector({
   apiKeyId,
   enabled = true,
   suppressAutoSelect = false,
+  fallbackModelName,
 }: ModelSelectorProps) {
   const {
     modelsByProvider,
@@ -636,8 +643,10 @@ export const ModelSelector = memo(function ModelSelector({
       );
       if (model) return model.displayName;
     }
-    return selectedModel; // Fall back to ID if not found
-  }, [selectedModel, availableProviders, modelsByProvider]);
+    // Not in the viewer's available models (e.g. a per-user model they can't
+    // access): prefer the server-resolved name over the raw model UUID.
+    return fallbackModelName ?? selectedModel;
+  }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
 
   const handleSelectModel = (modelValue: string) => {
     // Parse the provider:modelId format

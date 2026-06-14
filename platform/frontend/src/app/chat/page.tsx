@@ -711,32 +711,45 @@ export function ChatPageContent({
   type AgentLlmMeta = Record<string, unknown> & {
     modelId?: string | null;
     llmProviderRequiresPerUserCredential?: boolean;
+    resolvedLlmModelName?: string | null;
   };
-  const initialAgentRequiresPerUserConnect = useMemo(
-    () =>
-      agentRequiresPerUserConnect({
-        agent: internalAgents.find((a) => a.id === initialAgentId) as
-          | AgentLlmMeta
-          | undefined,
+  // Returns whether the per-user connect prompt applies and, if so, the agent's
+  // resolved model name — so the read-only chip can show "gpt-4" instead of the
+  // model's UUID (which the viewer can't resolve without access to the key).
+  const initialPerUserConnect = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === initialAgentId) as
+      | AgentLlmMeta
+      | undefined;
+    return {
+      needsConnect: agentRequiresPerUserConnect({
+        agent,
         selectedModelId: initialModel,
         isModelAvailable: chatModels.some((m) => m.dbId === initialModel),
       }),
-    [internalAgents, initialAgentId, initialModel, chatModels],
-  );
+      modelName: agent?.resolvedLlmModelName ?? undefined,
+    };
+  }, [internalAgents, initialAgentId, initialModel, chatModels]);
 
-  const conversationAgentRequiresPerUserConnect = useMemo(
-    () =>
-      agentRequiresPerUserConnect({
-        agent: internalAgents.find((a) => a.id === conversation?.agentId) as
-          | AgentLlmMeta
-          | undefined,
+  const conversationPerUserConnect = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
+      | AgentLlmMeta
+      | undefined;
+    return {
+      needsConnect: agentRequiresPerUserConnect({
+        agent,
         selectedModelId: conversation?.modelId,
         isModelAvailable: chatModels.some(
           (m) => m.dbId === conversation?.modelId,
         ),
       }),
-    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
-  );
+      modelName: agent?.resolvedLlmModelName ?? undefined,
+    };
+  }, [
+    internalAgents,
+    conversation?.agentId,
+    conversation?.modelId,
+    chatModels,
+  ]);
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -2374,7 +2387,12 @@ export function ChatPageContent({
                             handleConversationResetModelOverride
                           }
                           agentRequiresPerUserConnect={
-                            conversationAgentRequiresPerUserConnect
+                            conversationPerUserConnect.needsConnect
+                          }
+                          agentModelDisplayName={
+                            conversationPerUserConnect.needsConnect
+                              ? conversationPerUserConnect.modelName
+                              : undefined
                           }
                         />
                         <div className="text-center">
@@ -2489,7 +2507,12 @@ export function ChatPageContent({
                         modelSource={initialModelSource}
                         onResetModelOverride={handleResetModelOverride}
                         agentRequiresPerUserConnect={
-                          initialAgentRequiresPerUserConnect
+                          initialPerUserConnect.needsConnect
+                        }
+                        agentModelDisplayName={
+                          initialPerUserConnect.needsConnect
+                            ? initialPerUserConnect.modelName
+                            : undefined
                         }
                       />
                     </div>

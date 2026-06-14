@@ -220,6 +220,9 @@ class AgentModel {
             .select({
               id: schema.modelsTable.id,
               provider: schema.modelsTable.provider,
+              // The human-facing model identifier (e.g. "gpt-4"), distinct from
+              // the row's UUID `id`.
+              modelName: schema.modelsTable.modelId,
             })
             .from(schema.modelsTable)
             .where(inArray(schema.modelsTable.id, modelIds))
@@ -228,6 +231,7 @@ class AgentModel {
 
     const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
     const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
+    const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
 
     for (const agent of agents) {
       const provider: SupportedProvider | null =
@@ -238,6 +242,11 @@ class AgentModel {
       agent.llmProviderRequiresPerUserCredential = provider
         ? providerRequiresPerUserCredential(provider)
         : false;
+      // The model's human name, so a viewer who can't access the configured
+      // key still sees "gpt-4" rather than the model row's UUID.
+      agent.resolvedLlmModelName = agent.modelId
+        ? (modelNameMap.get(agent.modelId) ?? null)
+        : null;
     }
   }
 

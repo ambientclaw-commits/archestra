@@ -10974,6 +10974,7 @@ export type GetAgentsResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+            resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
         }>;
         pagination: {
@@ -11205,6 +11206,7 @@ export type CreateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -11405,6 +11407,7 @@ export type GetAllAgentsResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     }>;
 };
@@ -11580,6 +11583,7 @@ export type GetDefaultMcpGatewayResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -11755,6 +11759,7 @@ export type GetDefaultLlmProxyResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -12008,6 +12013,7 @@ export type ImportAgentResponses = {
                 prompt: string;
             }>;
             resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+            resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
         };
         warnings: Array<{
@@ -12276,6 +12282,7 @@ export type GetAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -12500,6 +12507,7 @@ export type UpdateAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -12677,6 +12685,7 @@ export type CloneAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };
@@ -13014,6 +13023,7 @@ export type RestoreAgentResponses = {
             prompt: string;
         }>;
         resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot';
+        resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
     };
 };

@@ -56,6 +56,9 @@ describe("AgentModel", () => {
       const fetched = await AgentModel.findById(agent.id);
       expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
       expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      // The model's human name, so a viewer without key access sees "gpt-4"
+      // rather than the model row's UUID.
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
 
       // The same metadata must appear on list responses, not just findById.
       const listed = (await AgentModel.findAll()).find(
