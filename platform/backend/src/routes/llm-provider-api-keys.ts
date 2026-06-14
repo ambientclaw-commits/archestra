@@ -275,6 +275,26 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
+      // Personal-scoped keys are self-service: any authenticated user can
+      // connect their own account / create a key only they can use (this is
+      // what lets "basic users" link GitHub Copilot without elevated rights).
+      // Shareable scopes (team, org) still require the create permission — org
+      // additionally requires llmProviderApiKey:admin, enforced above.
+      if (body.scope !== "personal") {
+        const canCreateSharedKeys = await userHasPermission(
+          user.id,
+          organizationId,
+          "llmProviderApiKey",
+          "create",
+        );
+        if (!canCreateSharedKeys) {
+          throw new ApiError(
+            403,
+            "You need the llmProviderApiKey:create permission to create team- or organization-scoped keys.",
+          );
+        }
+      }
+
       let secret: SelectSecret | null = null;
       let actualApiKeyValue: string | null = null;
       const runtimeTestBaseUrl = body.inferenceBaseUrl ?? body.baseUrl;

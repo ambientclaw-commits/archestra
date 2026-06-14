@@ -841,17 +841,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAvailableLlmProviderApiKeys]: {
     llmProviderApiKey: ["read"],
   },
-  [RouteId.CreateLlmProviderApiKey]: {
-    llmProviderApiKey: ["create"],
-  },
+  // Personal-scoped keys are self-service (any authenticated user can connect
+  // their own account / create a key only they can use); the handler requires
+  // llmProviderApiKey:create for team scope and :admin for org scope. Gating
+  // the route on :create would block "basic users" from linking their own
+  // GitHub Copilot account.
+  [RouteId.CreateLlmProviderApiKey]: {},
   // Device-flow sign-in exists solely to obtain the GitHub token for a new
-  // personal github-copilot provider key, so it carries the same permission.
-  [RouteId.GithubCopilotDeviceAuthStart]: {
-    llmProviderApiKey: ["create"],
-  },
-  [RouteId.GithubCopilotDeviceAuthPoll]: {
-    llmProviderApiKey: ["create"],
-  },
+  // personal github-copilot key, so it's self-service like the create route.
+  [RouteId.GithubCopilotDeviceAuthStart]: {},
+  [RouteId.GithubCopilotDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
