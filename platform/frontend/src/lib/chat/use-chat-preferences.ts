@@ -1,4 +1,5 @@
 import {
+  type archestraApiTypes,
   deriveModelSource as deriveModelSourceShared,
   type ModelSelection,
   type ModelSource,
@@ -8,6 +9,9 @@ import {
 } from "@archestra/shared";
 
 export type { ModelSource };
+
+/** The agent's resolved LLM config, as returned by the agents API. */
+type AgentLlmConfig = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 // ===== LocalStorage Keys =====
 
@@ -182,10 +186,7 @@ export function resolveModelForAgent(params: {
  */
 export function agentRequiresPerUserConnect(params: {
   agent:
-    | {
-        modelId?: string | null;
-        llmProviderRequiresPerUserCredential?: boolean;
-      }
+    | Pick<AgentLlmConfig, "modelId" | "llmProviderRequiresPerUserCredential">
     | undefined;
   selectedModelId: string | null | undefined;
   isModelAvailable: boolean;

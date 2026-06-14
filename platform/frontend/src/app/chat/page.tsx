@@ -708,18 +708,11 @@ export function ChatPageContent({
   // When the viewer hasn't connected their own account that model is not in
   // their available list; keep it selected (no silent swap) so sending it
   // surfaces an inline connect prompt instead of substituting another provider.
-  type AgentLlmMeta = Record<string, unknown> & {
-    modelId?: string | null;
-    llmProviderRequiresPerUserCredential?: boolean;
-    resolvedLlmModelName?: string | null;
-  };
   // Returns whether the per-user connect prompt applies and, if so, the agent's
   // resolved model name — so the read-only chip can show "gpt-4" instead of the
   // model's UUID (which the viewer can't resolve without access to the key).
   const initialPerUserConnect = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === initialAgentId) as
-      | AgentLlmMeta
-      | undefined;
+    const agent = internalAgents.find((a) => a.id === initialAgentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent,
@@ -731,9 +724,7 @@ export function ChatPageContent({
   }, [internalAgents, initialAgentId, initialModel, chatModels]);
 
   const conversationPerUserConnect = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
-      | AgentLlmMeta
-      | undefined;
+    const agent = internalAgents.find((a) => a.id === conversation?.agentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
         agent,
