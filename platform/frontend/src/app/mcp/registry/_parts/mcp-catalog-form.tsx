@@ -5,8 +5,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
   Ban,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Code,
   ExternalLink,
+  FileJson,
   Globe,
   IdCard,
   KeyRound,
@@ -102,6 +106,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { parseMcpJsonConfig } from "./mcp-json-config-paste";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -418,6 +423,12 @@ export function McpCatalogForm({
     }
   }, [authMethod, defaultIdentityProviderId, form, selectedIdentityProviderId]);
 
+  // JSON config paste state
+  const [jsonPasteOpen, setJsonPasteOpen] = useState(false);
+  const [jsonPasteText, setJsonPasteText] = useState("");
+  const [jsonPasteError, setJsonPasteError] = useState<string | null>(null);
+  const [jsonPasteSuccess, setJsonPasteSuccess] = useState(false);
+
   // BYOS (Bring Your Own Secrets) state for OAuth
   const [oauthVaultTeamId, setOauthVaultTeamId] = useState<string | null>(null);
   const [oauthVaultSecretPath, setOauthVaultSecretPath] = useState<
@@ -449,6 +460,68 @@ export function McpCatalogForm({
     initialLabelsFromProps,
   );
   const labelsRef = useRef<ProfileLabelsRef>(null);
+
+  // Handle JSON config paste: parse and populate form fields
+  const handleApplyJsonConfig = () => {
+    setJsonPasteError(null);
+    setJsonPasteSuccess(false);
+
+    const result = parseMcpJsonConfig(jsonPasteText);
+    if (!result.ok) {
+      setJsonPasteError(result.error);
+      return;
+    }
+
+    // Use first config (most configs have exactly one server)
+    const cfg = result.configs[0];
+    if (!cfg) {
+      setJsonPasteError("No server config found in the JSON");
+      return;
+    }
+
+    if (cfg.serverType === "remote") {
+      form.setValue("serverType", "remote", { shouldDirty: true });
+      if (cfg.url) form.setValue("serverUrl", cfg.url, { shouldDirty: true });
+      if (cfg.name && !form.getValues("name")) {
+        form.setValue("name", cfg.name, { shouldDirty: true });
+      }
+    } else {
+      // local server
+      form.setValue("serverType", "local", { shouldDirty: true });
+      if (cfg.command) {
+        form.setValue("localConfig.command", cfg.command, { shouldDirty: true });
+      }
+      if (cfg.args && cfg.args.length > 0) {
+        form.setValue("localConfig.arguments", cfg.args.join("\n"), {
+          shouldDirty: true,
+        });
+      }
+      if (cfg.env && Object.keys(cfg.env).length > 0) {
+        const envEntries = Object.entries(cfg.env).map(([key, value]) => ({
+          key,
+          type: "plain_text" as const,
+          value,
+          promptOnInstallation: false,
+          required: false,
+          description: "",
+        }));
+        form.setValue("localConfig.environment", envEntries, {
+          shouldDirty: true,
+        });
+      }
+      if (cfg.name && !form.getValues("name")) {
+        form.setValue("name", cfg.name, { shouldDirty: true });
+      }
+    }
+
+    setJsonPasteSuccess(true);
+    setJsonPasteText("");
+    // Close the panel after a brief moment so the user sees the ✓
+    setTimeout(() => {
+      setJsonPasteOpen(false);
+      setJsonPasteSuccess(false);
+    }, 1200);
+  };
 
   // Report dirty state to parent (includes label changes)
   const { isDirty: isFormDirty, dirtyFields } = form.formState;
@@ -1263,6 +1336,89 @@ export function McpCatalogForm({
                   </p>
                 </div>
               )}
+
+              {/* ── JSON config paste ───────────────────────────────────────── */}
+              <div className="rounded-lg border border-dashed">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJsonPasteOpen((prev) => !prev);
+                    setJsonPasteError(null);
+                    setJsonPasteSuccess(false);
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors rounded-lg"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileJson className="h-4 w-4" />
+                    Import from JSON (paste MCP config)
+                  </span>
+                  {jsonPasteOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+                {jsonPasteOpen && (
+                  <div className="px-4 pb-4 space-y-3 border-t">
+                    <p className="text-xs text-muted-foreground pt-3">
+                      Paste a JSON config copied from Claude Desktop, VS Code,
+                      or any MCP server catalog. Supported formats:
+                      &#123;&quot;mcpServers&quot;: ...&#125;,
+                      &#123;&quot;servers&quot;: ...&#125;, single-server
+                      &#123;&quot;command&quot;: ...&#125; or
+                      &#123;&quot;url&quot;: ...&#125;.
+                    </p>
+                    <Textarea
+                      placeholder={
+                        '{ "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"] }'
+                      }
+                      className="font-mono min-h-32 text-xs"
+                      value={jsonPasteText}
+                      onChange={(e) => {
+                        setJsonPasteText(e.target.value);
+                        setJsonPasteError(null);
+                        setJsonPasteSuccess(false);
+                      }}
+                    />
+                    {jsonPasteError && (
+                      <p className="flex items-center gap-1.5 text-sm text-destructive">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        {jsonPasteError}
+                      </p>
+                    )}
+                    {jsonPasteSuccess && (
+                      <p className="flex items-center gap-1.5 text-sm text-green-600">
+                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                        Config imported successfully
+                      </p>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setJsonPasteOpen(false);
+                          setJsonPasteText("");
+                          setJsonPasteError(null);
+                          setJsonPasteSuccess(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!jsonPasteText.trim()}
+                        onClick={handleApplyJsonConfig}
+                      >
+                        Apply config
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* ── end JSON config paste ─────────────────────────────────── */}
 
               {currentServerType === "remote" && (
                 <FormField
