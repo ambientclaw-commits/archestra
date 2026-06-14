@@ -18,6 +18,7 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import { NoSuchToolError } from "ai";
+import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
@@ -29,6 +30,22 @@ import {
 
 beforeEach(() => {
   mockSentryCaptureException.mockClear();
+});
+
+describe("mapProviderError - per-user provider auth required", () => {
+  it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
+    const result = mapProviderError(
+      new LlmProviderAuthRequiredError("github-copilot"),
+      "github-copilot",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.authAction).toEqual({
+      provider: "github-copilot",
+      providerLabel: "GitHub Copilot",
+    });
+  });
 });
 
 // =============================================================================
