@@ -2170,7 +2170,7 @@ export const updateGithubAppConfig = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `llmProviderApiKey:create`: Add new LLM provider API keys
+ * None (no additional RBAC permission required)
  */
 export const githubCopilotDeviceAuthStart = <ThrowOnError extends boolean = false>(options?: Options<GithubCopilotDeviceAuthStartData, ThrowOnError>) => (options?.client ?? client).post<GithubCopilotDeviceAuthStartResponses, GithubCopilotDeviceAuthStartErrors, ThrowOnError>({ url: '/api/github-copilot-auth/device/start', ...options });
 
@@ -2183,7 +2183,7 @@ export const githubCopilotDeviceAuthStart = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `llmProviderApiKey:create`: Add new LLM provider API keys
+ * None (no additional RBAC permission required)
  */
 export const githubCopilotDeviceAuthPoll = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotDeviceAuthPollData, ThrowOnError>) => (options.client ?? client).post<GithubCopilotDeviceAuthPollResponses, GithubCopilotDeviceAuthPollErrors, ThrowOnError>({
     url: '/api/github-copilot-auth/device/poll',
@@ -3402,7 +3402,7 @@ export const getLlmProviderApiKeys = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `llmProviderApiKey:create`: Add new LLM provider API keys
+ * None (no additional RBAC permission required)
  */
 export const createLlmProviderApiKey = <ThrowOnError extends boolean = false>(options: Options<CreateLlmProviderApiKeyData, ThrowOnError>) => (options.client ?? client).post<CreateLlmProviderApiKeyResponses, CreateLlmProviderApiKeyErrors, ThrowOnError>({
     url: '/api/llm-provider-api-keys',
