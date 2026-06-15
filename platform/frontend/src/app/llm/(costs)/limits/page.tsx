@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Progress } from "@/components/ui/progress";
+import { formatResetsIn } from "@/lib/limit-usage.utils";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -494,14 +495,23 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
+          const resetsIn = formatResetsIn(
+            row.original.lastCleanup,
+            cleanupInterval,
+          );
           return (
             <div className="space-y-0.5">
               <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatNextLimitReset(
-                  row.original.lastCleanup,
-                  cleanupInterval,
-                )}
+              <div className="flex items-center gap-1.5">
+                <div className="text-xs text-muted-foreground">
+                  {formatNextLimitReset(
+                    row.original.lastCleanup,
+                    cleanupInterval,
+                  )}
+                </div>
+                <span className="inline-flex items-center rounded-full bg-muted/70 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                  {resetsIn}
+                </span>
               </div>
             </div>
           );

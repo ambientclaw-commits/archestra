@@ -30,6 +30,7 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -440,6 +441,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           } satisfies ColumnDef<AgentData>,
         ]
       : []),
+    {
+      id: "usage",
+      header: "Usage",
+      size: 180,
+      cell: ({ row }) => (
+        <LimitUsageCell entityType="agent" entityId={row.original.id} />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",

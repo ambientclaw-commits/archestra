@@ -10,6 +10,7 @@ import {
   MessageSquareDashed,
   RefreshCw,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -148,6 +149,11 @@ export function InlineChatError({
                   {usageLimitMessage}
                 </p>
               )}
+              {isUsageLimitExceeded && chatError.usageLimitEntityType && (
+                <span className="inline-flex items-center rounded-full bg-muted/70 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono capitalize">
+                  {chatError.usageLimitEntityType.replace(/_/g, " ")} limit
+                </span>
+              )}
             </div>
           </div>
         </MessageContent>
@@ -216,6 +222,34 @@ export function InlineChatError({
               <p className="text-xs text-muted-foreground">
                 {usageLimitMessage}
               </p>
+            )}
+
+            {isUsageLimitExceeded && (
+              <div className="rounded-md bg-muted/40 border border-border/50 p-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Gauge className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-medium text-foreground">
+                    Usage limit exceeded
+                  </span>
+                  {chatError.usageLimitEntityType && (
+                    <span className="ml-auto inline-flex items-center rounded-full bg-muted/70 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono capitalize">
+                      {chatError.usageLimitEntityType.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
+                {isAdmin && (
+                  <p className="text-xs text-muted-foreground">
+                    Review your{" "}
+                    <Link
+                      href="/llm/limits"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      usage limits
+                    </Link>{" "}
+                    to adjust budgets or reset periods.
+                  </p>
+                )}
+              </div>
             )}
 
             {isAdmin && (

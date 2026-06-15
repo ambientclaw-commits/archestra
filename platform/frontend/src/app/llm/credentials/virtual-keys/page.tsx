@@ -48,6 +48,7 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -176,6 +177,17 @@ export default function VirtualKeysPage() {
           ) : (
             <span className="text-sm text-muted-foreground">Never</span>
           ),
+      },
+      {
+        id: "usage",
+        header: "Usage",
+        size: 180,
+        cell: ({ row }) => (
+          <LimitUsageCell
+            entityType="virtual_key"
+            entityId={row.original.id}
+          />
+        ),
       },
       {
         id: "actions",

@@ -55,6 +55,7 @@ import {
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
+import { ChatUsageLimitBar } from "@/components/chat/chat-usage-limit-bar";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
@@ -2342,6 +2343,11 @@ export function ChatPageContent({
                           }
                         />
                         <div className="text-center">
+                          <div className="flex items-center justify-center gap-4 mb-1">
+                            <ChatUsageLimitBar
+                              agentId={promptAgentId ?? activeAgentId}
+                            />
+                          </div>
                           <Version inline />
                         </div>
                       </div>

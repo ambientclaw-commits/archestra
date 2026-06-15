@@ -21,6 +21,7 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -308,6 +309,15 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           } satisfies ColumnDef<ProxyData>,
         ]
       : []),
+    {
+      id: "usage",
+      header: "Usage",
+      size: 180,
+      // LLM proxies are agents with agentType; use entityType "agent" for limits
+      cell: ({ row }) => (
+        <LimitUsageCell entityType="agent" entityId={row.original.id} />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",

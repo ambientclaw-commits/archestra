@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthProviderIcon } from "@/components/auth-provider-icon";
+import { LimitUsageCell } from "@/components/limit-usage-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
@@ -328,6 +329,17 @@ function MembersTab({
             })}
           </span>
         ),
+    },
+    {
+      id: "usage",
+      header: "Usage",
+      size: 180,
+      cell: ({ row }) => {
+        const member = row.original;
+        // PendingSignupMember won't have a stable ID yet; skip
+        if ("provider" in member) return <span className="text-xs text-muted-foreground">–</span>;
+        return <LimitUsageCell entityType="user" entityId={member.id} />;
+      },
     },
     {
       id: "actions",
